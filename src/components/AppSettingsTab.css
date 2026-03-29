@@ -1,0 +1,280 @@
+.app-settings-tab {
+  padding: 1rem 0;
+}
+
+.app-settings-tab h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.as-subtitle {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+/* Messages */
+.success-msg {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--success);
+  font-size: 0.82rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+/* Card */
+.as-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.as-card h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.as-card h3 i {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.as-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.as-card-header h3 {
+  margin-bottom: 0;
+}
+
+.btn-sm {
+  background: none;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-sm:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Form */
+.as-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.as-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.as-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.as-field span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.as-field input,
+.as-field select {
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  padding: 0.5rem 0.7rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  transition: border-color 0.2s;
+}
+
+.as-field input::placeholder {
+  color: var(--gray-600);
+}
+
+.as-field input:focus,
+.as-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.as-field select option {
+  background: var(--deep-blue);
+}
+
+/* Tabs checkboxes */
+.as-tabs-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.as-tabs-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.as-tabs-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.as-check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  background: var(--overlay-light);
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  transition: all 0.2s;
+}
+
+.as-check:hover {
+  border-color: var(--border-default);
+}
+
+.as-check input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.as-check-sm {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+}
+
+/* Staff list */
+.as-staff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.as-staff-item {
+  background: var(--overlay-light);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.as-staff-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.as-staff-info {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.as-staff-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.as-role-select {
+  background: var(--deep-blue);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.as-role-select option {
+  background: var(--deep-blue);
+}
+
+.as-role-select.role-admin {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.as-role-select.role-employee {
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
+.as-remove-btn {
+  background: none;
+  border: none;
+  color: var(--gray-600);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.as-remove-btn:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.as-staff-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.as-all-access {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.as-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 1.5rem;
+}

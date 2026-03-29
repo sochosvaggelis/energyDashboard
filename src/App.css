@@ -1,0 +1,183 @@
+/* Layout */
+.admin-app {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.admin-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.sidebar-brand {
+  padding: 0 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 1rem;
+}
+
+.sidebar-brand h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.admin-subtitle {
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0 0.75rem;
+  flex: 1;
+}
+
+.sidebar-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sidebar-btn:hover {
+  background: var(--overlay-light);
+  color: var(--text-secondary);
+}
+
+.sidebar-btn.active {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--accent);
+}
+
+.sidebar-btn i {
+  font-size: 1rem;
+  width: 20px;
+  text-align: center;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 0.5rem 0.25rem;
+}
+
+.sidebar-footer {
+  padding: 1rem 1.25rem 0;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Body (right side) */
+.admin-body {
+  flex: 1;
+  min-width: 0;
+  padding: 2rem 1.5rem;
+  max-width: 1400px;
+}
+
+/* Shared */
+.admin-user {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.admin-user i {
+  color: var(--accent);
+  font-size: 1rem;
+}
+
+.admin-logout {
+  background: none;
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s;
+}
+
+.admin-logout:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.admin-role-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  margin-left: 0.25rem;
+}
+
+.admin-main {
+  margin-top: 1.5rem;
+}
+
+/* No access */
+.no-access {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+}
+
+.no-access i {
+  font-size: 3rem;
+  opacity: 0.4;
+}
+
+.no-access h2 {
+  font-size: 1.2rem;
+  color: var(--text-primary);
+}
+
+.no-access p {
+  font-size: 0.88rem;
+  max-width: 320px;
+}
+
+.no-access .admin-logout {
+  margin-top: 1rem;
+}

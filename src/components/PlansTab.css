@@ -1,0 +1,204 @@
+.plans-tab {
+  padding: 1rem 0;
+}
+
+.tariff-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--overlay-medium);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.modal-wide {
+  max-width: 560px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-row label {
+  margin-bottom: 1rem;
+}
+
+.tiers-cell {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-width: 200px;
+}
+
+.tier-edit-row td {
+  padding: 0 1rem 0.75rem !important;
+  border-bottom: 1px solid var(--border-default) !important;
+}
+
+.tier-edit-row:hover {
+  background: none !important;
+}
+
+/* Price section in modal */
+.price-section {
+  margin-bottom: 1rem;
+}
+
+.price-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.price-edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.price-edit-cell .inline-input {
+  flex: 1;
+}
+
+.fx-badge {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 600;
+  font-style: italic;
+}
+
+.formula-section-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+/* fx toggle button */
+.btn-mode-toggle {
+  background: var(--overlay-medium);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+  width: 30px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-style: italic;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.btn-mode-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-mode-toggle.active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Tier Editor */
+.tier-editor {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--overlay-light);
+}
+
+.tier-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.tier-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.btn-tier-add {
+  background: none;
+  border: 1px dashed var(--border-medium);
+  color: var(--accent);
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.btn-tier-add:hover {
+  border-color: var(--accent);
+}
+
+.tier-block {
+  margin-bottom: 0.5rem;
+}
+
+.tier-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.tier-row input {
+  flex: 1;
+  background: var(--deep-blue);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.tier-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tier-row input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.btn-tier-remove {
+  background: rgba(239, 68, 68, 0.15);
+  border: none;
+  color: #fca5a5;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.btn-tier-remove:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.tier-empty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}

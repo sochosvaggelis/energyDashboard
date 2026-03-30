@@ -69,32 +69,12 @@ export default function ProvidersTab({ serviceType }) {
       if (cached) { setProviders(cached); setLoading(false); return }
     }
 
-    if (serviceType === 'gas') {
-      // Gas tab: show providers flagged with has_gas
-      const { data, error } = await supabase
-        .from('providers')
-        .select('*')
-        .eq('has_gas', true)
-        .order('created_at', { ascending: true })
-      if (error) setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.')
-      else { setProviders(data); cacheSet(cacheKey, data) }
-    } else {
-      // Electricity tab: show providers that have at least one electricity plan
-      const { data: planRows, error: planErr } = await supabase
-        .from('plans')
-        .select('provider_id')
-        .eq('service_type', serviceType)
-      if (planErr) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); setLoading(false); return }
-      const providerIds = [...new Set(planRows.map(r => r.provider_id))]
-      if (providerIds.length === 0) { setProviders([]); cacheSet(cacheKey, []); setLoading(false); return }
-      const { data, error } = await supabase
-        .from('providers')
-        .select('*')
-        .in('id', providerIds)
-        .order('created_at', { ascending: true })
-      if (error) setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.')
-      else { setProviders(data); cacheSet(cacheKey, data) }
-    }
+    const { data, error } = await supabase
+      .from('providers')
+      .select('*')
+      .order('created_at', { ascending: true })
+    if (error) setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.')
+    else { setProviders(data); cacheSet(cacheKey, data) }
     setLoading(false)
   }
 

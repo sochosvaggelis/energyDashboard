@@ -97,9 +97,9 @@ function FileThumb({ pathOrUrl, label, index, onLightbox, resolveFileUrl }) {
   )
 }
 
-export default function CustomersTab({ user }) {
+export default function CustomersTab({ user, refreshKey }) {
   const [submissions, setSubmissions] = useState([])
-  const [statusOptions, setStatusOptions] = useState(DEFAULT_statusOptions)
+  const [statusOptions, setStatusOptions] = useState(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
@@ -111,6 +111,10 @@ export default function CustomersTab({ user }) {
   const [noteText, setNoteText] = useState('')
   const [notesSaving, setNotesSaving] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [statusChange, setStatusChange] = useState(null) // { id, oldStatus, newStatus }
+  const [statusComment, setStatusComment] = useState('')
+  const [statusSaving, setStatusSaving] = useState(false)
+  const [historyId, setHistoryId] = useState(null)
   const notesEndRef = useRef(null)
 
   const ROWS_PER_PAGE = 25
@@ -148,7 +152,7 @@ export default function CustomersTab({ user }) {
   }, {})
 
   useEffect(() => {
-    fetchSubmissions()
+    fetchSubmissions(refreshKey > 0)
     supabase
       .from('settings')
       .select('value')
@@ -156,10 +160,12 @@ export default function CustomersTab({ user }) {
       .single()
       .then(({ data }) => {
         if (data?.value) {
-          try { setStatusOptions(JSON.parse(data.value)) } catch {}
+          try { setStatusOptions(JSON.parse(data.value)) } catch { setStatusOptions(DEFAULT_statusOptions) }
+        } else {
+          setStatusOptions(prev => prev ?? DEFAULT_statusOptions)
         }
       })
-  }, [])
+  }, [refreshKey])
 
   // Realtime: auto-update when submissions change
   useEffect(() => {
@@ -206,21 +212,46 @@ export default function CustomersTab({ user }) {
     setLoading(false)
   }
 
-  async function updateStatus(id, newStatus) {
+  function requestStatusChange(id, newStatus) {
+    const sub = submissions.find(s => s.id === id)
+    const oldStatus = sub?.status || 'Νέο'
+    if (oldStatus === newStatus) return
+    setStatusChange({ id, oldStatus, newStatus })
+    setStatusComment('')
+  }
+
+  async function confirmStatusChange() {
+    if (!statusChange) return
+    setStatusSaving(true)
     setError(null)
+    const { id, oldStatus, newStatus } = statusChange
+    const sub = submissions.find(s => s.id === id)
+    const history = sub?.status_history || []
+    const author = user?.user_metadata?.display_name || user?.email || 'Άγνωστος'
+    const entry = {
+      from: oldStatus,
+      to: newStatus,
+      comment: statusComment.trim() || null,
+      author,
+      changed_at: new Date().toISOString()
+    }
+
     const { data, error } = await supabase
       .from('submissions')
-      .update({ status: newStatus })
+      .update({ status: newStatus, status_history: [...history, entry] })
       .eq('id', id)
       .select()
-    if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
-    logAction('update_status', { entity: 'submission', entityId: id, details: { status: newStatus } })
+    if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); setStatusSaving(false); return }
+    logAction('update_status', { entity: 'submission', entityId: id, details: { status: newStatus, comment: entry.comment } })
     const row = data?.[0]
     if (row) {
       const updated = submissions.map(s => s.id === id ? row : s)
       setSubmissions(updated)
       cacheSet(CACHE_KEY, updated)
     }
+    setStatusChange(null)
+    setStatusComment('')
+    setStatusSaving(false)
   }
 
   async function addNote(id) {
@@ -349,7 +380,7 @@ export default function CustomersTab({ user }) {
             >
               Όλα <span className="pill-count">{submissions.length}</span>
             </button>
-            {statusOptions.map(s => (
+            {(statusOptions || []).map(s => (
               <button
                 key={s}
                 className={`ct-pill ${getStatusClass(s)} ${statusFilter === s ? 'active' : ''}`}
@@ -571,10 +602,20 @@ export default function CustomersTab({ user }) {
                                 <select
                                   className={`status-select ${getStatusClass(status)}`}
                                   value={status}
-                                  onChange={e => { e.stopPropagation(); updateStatus(s.id, e.target.value) }}
+                                  onChange={e => { e.stopPropagation(); requestStatusChange(s.id, e.target.value) }}
                                 >
-                                  {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                  {(statusOptions || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
+                                {(s.status_history || []).length > 0 && (
+                                  <button
+                                    className="ct-history-btn"
+                                    onClick={e => { e.stopPropagation(); setHistoryId(historyId === s.id ? null : s.id) }}
+                                    title="Ιστορικό status"
+                                  >
+                                    <i className="fa-solid fa-clock-rotate-left"></i>
+                                    <span>{(s.status_history || []).length}</span>
+                                  </button>
+                                )}
                               </div>
                               <div className="ct-action-right">
                                 <span className="ct-submitted-date">
@@ -582,6 +623,32 @@ export default function CustomersTab({ user }) {
                                 </span>
                               </div>
                             </div>
+
+                            {/* Status history timeline */}
+                            {historyId === s.id && (s.status_history || []).length > 0 && (
+                              <div className="ct-history-section">
+                                <h4><i className="fa-solid fa-clock-rotate-left"></i> Ιστορικό Status</h4>
+                                <div className="ct-history-timeline">
+                                  {(s.status_history || []).map((h, i) => (
+                                    <div key={i} className="ct-history-entry">
+                                      <div className="ct-history-dot" />
+                                      <div className="ct-history-content">
+                                        <div className="ct-history-header">
+                                          <span className={`ct-status-badge ${getStatusClass(h.from)}`}>{h.from}</span>
+                                          <i className="fa-solid fa-arrow-right ct-history-arrow"></i>
+                                          <span className={`ct-status-badge ${getStatusClass(h.to)}`}>{h.to}</span>
+                                          <span className="ct-history-date">{formatDate(h.changed_at)}</span>
+                                        </div>
+                                        <div className="ct-history-meta">
+                                          <span className="ct-history-author"><i className="fa-solid fa-user"></i> {h.author}</span>
+                                        </div>
+                                        {h.comment && <p className="ct-history-comment">{h.comment}</p>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -625,6 +692,42 @@ export default function CustomersTab({ user }) {
           </button>
           <img src={lightbox} alt="Preview" onClick={e => e.stopPropagation()} />
         </div>
+      )}
+
+      {/* Status change modal */}
+      {statusChange && (
+        <>
+          <div className="notes-overlay" onClick={() => setStatusChange(null)} />
+          <div className="ct-status-modal">
+            <div className="ct-status-modal-header">
+              <h3>Αλλαγή Status</h3>
+              <button className="notes-close" onClick={() => setStatusChange(null)}>
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div className="ct-status-modal-body">
+              <div className="ct-status-modal-change">
+                <span className={`ct-status-badge ${getStatusClass(statusChange.oldStatus)}`}>{statusChange.oldStatus}</span>
+                <i className="fa-solid fa-arrow-right"></i>
+                <span className={`ct-status-badge ${getStatusClass(statusChange.newStatus)}`}>{statusChange.newStatus}</span>
+              </div>
+              <textarea
+                className="ct-status-comment"
+                placeholder="Σχόλιο (προαιρετικό)..."
+                value={statusComment}
+                onChange={e => setStatusComment(e.target.value)}
+                rows={3}
+                autoFocus
+              />
+            </div>
+            <div className="ct-status-modal-footer">
+              <button className="btn-cancel" onClick={() => setStatusChange(null)}>Ακύρωση</button>
+              <button className="btn-primary" onClick={confirmStatusChange} disabled={statusSaving}>
+                {statusSaving ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Αποθήκευση'}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Notes sidebar */}

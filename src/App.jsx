@@ -21,20 +21,35 @@ export default function App() {
   const [staffLoading, setStaffLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(null)
   const [activeCategory, setActiveCategory] = useState('electricity')
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  // Auto-refresh data every 10 minutes
+  useEffect(() => {
+    const id = setInterval(() => {
+      cacheClearAll()
+      setRefreshKey(k => k + 1)
+    }, 10 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      if (!session) { setStaffInfo(null); setStaffLoading(true) }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!newSession) {
+        setSession(null)
+        setStaffInfo(null)
+        setStaffLoading(true)
+        return
+      }
+      // Only update if user changed — token refreshes (tab re-focus) keep the same reference
+      setSession(prev => prev?.user?.id === newSession.user?.id ? prev : newSession)
     })
 
-    // Auto-refresh session every 1 hour (with user confirmation)
+    // Auto-refresh session every 1 hour
     const refreshInterval = setInterval(() => {
-      cacheClearAll()
       supabase.auth.refreshSession()
     }, 60 * 60 * 1000)
 
@@ -144,18 +159,18 @@ export default function App() {
       <div className="admin-body">
         {activeCategory === 'customers' ? (
           <main className="admin-main">
-            <CustomersTab user={user} />
+            <CustomersTab user={user} refreshKey={refreshKey} />
           </main>
         ) : (
           <>
             <Tabs tabs={allowedTabs} active={currentTab} onChange={setActiveTab} />
             <main className="admin-main">
-              {currentTab === 'Providers' && <ProvidersTab serviceType={activeCategory} />}
-              {currentTab === 'Plans' && <PlansTab serviceType={activeCategory} />}
-              {currentTab === 'Ανά Κατηγορία' && <PlansByCategoryTab serviceType={activeCategory} />}
-              {currentTab === 'Settings' && <SettingsTab />}
-              {currentTab === 'Status Settings' && <StatusSettingsTab />}
-              {currentTab === 'App Settings' && <AppSettingsTab user={user} staffInfo={staffInfo} />}
+              {currentTab === 'Providers' && <ProvidersTab serviceType={activeCategory} refreshKey={refreshKey} />}
+              {currentTab === 'Plans' && <PlansTab serviceType={activeCategory} refreshKey={refreshKey} />}
+              {currentTab === 'Ανά Κατηγορία' && <PlansByCategoryTab serviceType={activeCategory} refreshKey={refreshKey} />}
+              {currentTab === 'Settings' && <SettingsTab refreshKey={refreshKey} />}
+              {currentTab === 'Status Settings' && <StatusSettingsTab refreshKey={refreshKey} />}
+              {currentTab === 'App Settings' && <AppSettingsTab user={user} staffInfo={staffInfo} refreshKey={refreshKey} />}
             </main>
           </>
         )}

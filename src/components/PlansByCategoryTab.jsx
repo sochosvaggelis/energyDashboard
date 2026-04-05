@@ -189,7 +189,7 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
   const [collapsed, setCollapsed] = useState(false)
   const catClass = CATEGORY_CLASSES[title] || ''
   const isVariable = title === 'Κυμαινόμενο Τιμολόγιο'
-  const colCount = isVariable ? 14 : 8
+  const colCount = isVariable ? 13 : 8
 
   function getVarsForProvider(providerId) {
     const prov = providers.find(p => p.id === providerId)
@@ -220,11 +220,10 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
                 <th>Plan Name</th>
                 <th>Price/kWh</th>
                 <th>Night/kWh</th>
+                {isVariable && <th>ΤΕΑ</th>}
                 {isVariable && <th>Ll</th>}
                 {isVariable && <th>Lu</th>}
                 {isVariable && <th>Τβ</th>}
-                {isVariable && <th>AF</th>}
-                {isVariable && <th>γ</th>}
                 {isVariable && <th>α</th>}
                 <th>Κλιμάκια</th>
                 <th>Monthly Fee</th>
@@ -320,7 +319,19 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
                         </td>
                         {isVariable && (() => {
                           const teaReq = editData.price_mode === 'auto' || editData.night_price_mode === 'auto'
+                          const globalTea = variables.TEA ?? variables.tea ?? ''
                           return (<>
+                            <td>
+                              <input
+                                className="inline-input"
+                                type="number"
+                                step="any"
+                                value={editData.tea}
+                                placeholder={globalTea !== '' ? globalTea : '—'}
+                                onChange={e => onSetEditData({ ...editData, tea: e.target.value })}
+                                title={globalTea !== '' ? `Default: ${globalTea}` : 'Ορίστε ΤΕΑ στα Settings'}
+                              />
+                            </td>
                             <td>
                               <input
                                 className={`inline-input${teaReq ? ' tea-required' : ''}`}
@@ -349,24 +360,6 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
                                 value={editData.tv}
                                 onChange={e => onSetEditData({ ...editData, tv: e.target.value })}
                                 required={teaReq}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                className="inline-input"
-                                type="number"
-                                step="any"
-                                value={editData.af}
-                                onChange={e => onSetEditData({ ...editData, af: e.target.value })}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                className="inline-input"
-                                type="number"
-                                step="any"
-                                value={editData.gamma}
-                                onChange={e => onSetEditData({ ...editData, gamma: e.target.value })}
                               />
                             </td>
                             <td>
@@ -409,11 +402,10 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
                         <td>{p.plan_name}</td>
                         <td>{displayPrice(p, getVarsForProvider(p.provider_id))}</td>
                         <td>{displayNightPrice(p, getVarsForProvider(p.provider_id))}</td>
+                        {isVariable && <td>{p.tea != null ? p.tea : <span className="tea-default">{variables.TEA ?? variables.tea ?? '—'}</span>}</td>}
                         {isVariable && <td>{p.ll != null ? p.ll : '—'}</td>}
                         {isVariable && <td>{p.lu != null ? p.lu : '—'}</td>}
                         {isVariable && <td>{p.tv != null ? p.tv : '—'}</td>}
-                        {isVariable && <td>{p.af != null ? p.af : '—'}</td>}
-                        {isVariable && <td>{p.gamma != null ? p.gamma : '—'}</td>}
                         {isVariable && <td>{p.alpha != null ? p.alpha : '—'}</td>}
                         <td className="tiers-cell">{formatTiers(p.pricing_tiers)}</td>
                         <td>{p.monthly_fee_eur != null ? `${p.monthly_fee_eur}€` : '—'}</td>
@@ -448,7 +440,7 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
   )
 }
 
-export default function PlansByCategoryTab({ serviceType }) {
+export default function PlansByCategoryTab({ serviceType, refreshKey }) {
   const [plans, setPlans] = useState([])
   const [providers, setProviders] = useState([])
   const [variables, setVariables] = useState({})
@@ -460,10 +452,10 @@ export default function PlansByCategoryTab({ serviceType }) {
   const [showInfo, setShowInfo] = useState(false)
 
   useEffect(() => {
-    fetchPlans()
+    fetchPlans(refreshKey > 0)
     fetchProviders()
     fetchVariables()
-  }, [serviceType])
+  }, [serviceType, refreshKey])
 
   async function fetchVariables() {
     const { data } = await supabase.from('settings').select('key, value')
@@ -522,11 +514,10 @@ export default function PlansByCategoryTab({ serviceType }) {
       price_mode: isVar && plan.price_formula?.base_type === 'auto' ? 'auto' : 'static',
       night_price_per_kwh: plan.night_price_per_kwh ?? '',
       night_price_mode: isVar && plan.night_price_formula?.base_type === 'auto' ? 'auto' : 'static',
+      tea: plan.tea ?? '',
       ll: plan.ll ?? '',
       lu: plan.lu ?? '',
       tv: plan.tv ?? '',
-      af: plan.af ?? '',
-      gamma: plan.gamma ?? '',
       alpha: plan.alpha ?? '',
       monthly_fee_eur: plan.monthly_fee_eur ?? '',
       social_tariff: plan.social_tariff,
@@ -555,11 +546,10 @@ export default function PlansByCategoryTab({ serviceType }) {
       return
     }
     const updateData = {
+      tea: editData.tea !== '' ? safeNumber(editData.tea, null) : null,
       ll: editData.ll !== '' ? safeNumber(editData.ll, null) : null,
       lu: editData.lu !== '' ? safeNumber(editData.lu, null) : null,
       tv: editData.tv !== '' ? safeNumber(editData.tv, null) : null,
-      af: editData.af !== '' ? safeNumber(editData.af, null) : null,
-      gamma: editData.gamma !== '' ? safeNumber(editData.gamma, null) : null,
       alpha: editData.alpha !== '' ? safeNumber(editData.alpha, null) : null,
       price_per_kwh: editData.price_per_kwh !== '' ? safeNumber(editData.price_per_kwh, null) : null,
       price_formula: editData.price_mode === 'auto'

@@ -996,3 +996,200 @@
     align-items: flex-start;
   }
 }
+
+/* ─── Status change modal ─── */
+.ct-status-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--surface, #1e293b);
+  border: 1px solid var(--border-subtle, #334155);
+  border-radius: 12px;
+  padding: 0;
+  width: 420px;
+  max-width: 90vw;
+  z-index: 9100;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.ct-status-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle, #334155);
+}
+
+.ct-status-modal-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.ct-status-modal-body {
+  padding: 1.25rem;
+}
+
+.ct-status-modal-change {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.ct-status-modal-change .fa-arrow-right {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.75rem;
+}
+
+.ct-status-comment {
+  width: 100%;
+  background: var(--overlay-light, #0f172a);
+  border: 1px solid var(--border-subtle, #334155);
+  color: var(--text-primary, #f1f5f9);
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  resize: none;
+  line-height: 1.5;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.ct-status-comment:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ct-status-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--border-subtle, #334155);
+}
+
+.ct-status-modal-footer .btn-cancel {
+  background: transparent;
+  border: 1px solid var(--border-subtle, #334155);
+  color: var(--text-secondary, #cbd5e1);
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ─── Status history button ─── */
+.ct-history-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--overlay-light, #0f172a);
+  border: 1px solid var(--border-subtle, #334155);
+  color: var(--text-secondary, #cbd5e1);
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ct-history-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ─── Status history timeline ─── */
+.ct-history-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle, #334155);
+}
+
+.ct-history-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  color: var(--text-primary, #f1f5f9);
+}
+
+.ct-history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--border-subtle, #334155);
+}
+
+.ct-history-entry {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  position: relative;
+}
+
+.ct-history-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent, #38bdf8);
+  border: 2px solid var(--surface, #1e293b);
+  flex-shrink: 0;
+  margin-top: 0.3rem;
+  margin-left: -0.44rem;
+}
+
+.ct-history-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ct-history-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.ct-history-arrow {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.65rem;
+}
+
+.ct-history-date {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.72rem;
+  margin-left: auto;
+}
+
+.ct-history-meta {
+  margin-top: 0.2rem;
+}
+
+.ct-history-author {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.72rem;
+}
+
+.ct-history-author i {
+  margin-right: 0.2rem;
+}
+
+.ct-history-comment {
+  margin: 0.3rem 0 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--overlay-light, #0f172a);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #cbd5e1);
+  line-height: 1.4;
+}

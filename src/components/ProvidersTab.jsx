@@ -41,7 +41,7 @@ function dataUriToSvg(dataUri) {
   }
 }
 
-export default function ProvidersTab({ serviceType }) {
+export default function ProvidersTab({ serviceType, refreshKey }) {
   const [providers, setProviders] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -59,8 +59,8 @@ export default function ProvidersTab({ serviceType }) {
   )
 
   useEffect(() => {
-    fetchProviders()
-  }, [serviceType])
+    fetchProviders(refreshKey > 0)
+  }, [serviceType, refreshKey])
 
   async function fetchProviders(skipCache = false) {
     setLoading(true)

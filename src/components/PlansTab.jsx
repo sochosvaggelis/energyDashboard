@@ -19,7 +19,7 @@ const emptyForm = {
   tariff_type: TARIFF_TYPES[0]
 }
 
-export default function PlansTab({ serviceType }) {
+export default function PlansTab({ serviceType, refreshKey }) {
   const [plans, setPlans] = useState([])
   const [providers, setProviders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -39,9 +39,10 @@ export default function PlansTab({ serviceType }) {
   )
 
   useEffect(() => {
-    fetchPlans()
-    fetchProviders()
-  }, [serviceType])
+    const skip = refreshKey > 0
+    fetchPlans(skip)
+    fetchProviders(skip)
+  }, [serviceType, refreshKey])
 
   async function fetchProviders(skipCache = false) {
     if (!skipCache) {

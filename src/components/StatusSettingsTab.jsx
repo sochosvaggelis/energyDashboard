@@ -5,7 +5,7 @@ import './StatusSettingsTab.css'
 const DEFAULT_STATUSES = ['Νέο', 'Σε επεξεργασία', 'Ολοκληρωμένο', 'Ακυρωμένο']
 const SETTINGS_KEY = 'status_options'
 
-export default function StatusSettingsTab() {
+export default function StatusSettingsTab({ refreshKey }) {
   const [statuses, setStatuses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -14,7 +14,7 @@ export default function StatusSettingsTab() {
   const [editingIdx, setEditingIdx] = useState(null)
   const [editValue, setEditValue] = useState('')
 
-  useEffect(() => { fetchStatuses() }, [])
+  useEffect(() => { fetchStatuses() }, [refreshKey])
 
   async function fetchStatuses() {
     setLoading(true)

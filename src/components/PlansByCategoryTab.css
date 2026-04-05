@@ -349,6 +349,12 @@
   box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.4);
 }
 
+/* Default TEA value (from global settings) */
+.tea-default {
+  color: var(--text-muted, #94a3b8);
+  font-style: italic;
+}
+
 /* Ensure full table visibility */
 .category-section .table-wrap {
   border: none;

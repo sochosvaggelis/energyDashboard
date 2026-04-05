@@ -41,7 +41,7 @@ export function evaluateFormula(formula, variables = {}) {
 }
 
 export function computeAutoPrice(plan, variables, { night = false } = {}) {
-  const tea = Number(variables.TEA ?? variables.tea ?? 0)
+  const tea = Number(plan.tea ?? variables.TEA ?? variables.tea ?? 0)
   const tv = Number((night ? (plan.night_tv ?? plan.tv) : plan.tv) ?? 0)
   const ll = Number((night ? (plan.night_ll ?? plan.ll) : plan.ll) ?? 0)
   const lu = Number((night ? (plan.night_lu ?? plan.lu) : plan.lu) ?? 0)

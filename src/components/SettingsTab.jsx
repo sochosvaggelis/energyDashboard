@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import './SettingsTab.css'
 
-export default function SettingsTab() {
+export default function SettingsTab({ refreshKey }) {
   const [variables, setVariables] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -11,7 +11,7 @@ export default function SettingsTab() {
   const [newKey, setNewKey] = useState('')
   const [newValue, setNewValue] = useState('')
 
-  useEffect(() => { fetchVariables() }, [])
+  useEffect(() => { fetchVariables() }, [refreshKey])
 
   async function fetchVariables() {
     setLoading(true)

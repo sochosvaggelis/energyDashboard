@@ -6,7 +6,7 @@ import './AppSettingsTab.css'
 const ALL_TABS = ['Providers', 'Plans', 'Ανά Κατηγορία', 'Πελάτες', 'Settings', 'App Settings']
 const ROLE_OPTIONS = ['admin', 'employee']
 
-export default function AppSettingsTab({ user, staffInfo }) {
+export default function AppSettingsTab({ user, staffInfo, refreshKey }) {
   const [staff, setStaff] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -20,7 +20,7 @@ export default function AppSettingsTab({ user, staffInfo }) {
   const [newTabs, setNewTabs] = useState(['Πελάτες'])
   const [creating, setCreating] = useState(false)
 
-  useEffect(() => { fetchStaff() }, [])
+  useEffect(() => { fetchStaff() }, [refreshKey])
 
   async function fetchStaff() {
     setLoading(true)

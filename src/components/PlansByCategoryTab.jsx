@@ -189,7 +189,7 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
   const [collapsed, setCollapsed] = useState(false)
   const catClass = CATEGORY_CLASSES[title] || ''
   const isVariable = title === 'Κυμαινόμενο Τιμολόγιο'
-  const colCount = isVariable ? 13 : 8
+  const colCount = isVariable ? 14 : 9
 
   function getVarsForProvider(providerId) {
     const prov = providers.find(p => p.id === providerId)
@@ -227,6 +227,7 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
                 {isVariable && <th>α</th>}
                 <th>Κλιμάκια</th>
                 <th>Monthly Fee</th>
+                <th>Διάρκεια</th>
                 <th>Social</th>
                 <th>Actions</th>
               </tr>
@@ -386,6 +387,16 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
                         </td>
                         <td>
                           <input
+                            className="inline-input"
+                            type="number"
+                            min="1"
+                            value={editData.duration}
+                            onChange={e => onSetEditData({ ...editData, duration: e.target.value })}
+                            placeholder="π.χ. 12"
+                          />
+                        </td>
+                        <td>
+                          <input
                             type="checkbox"
                             checked={editData.social_tariff}
                             onChange={e => onSetEditData({ ...editData, social_tariff: e.target.checked })}
@@ -409,6 +420,7 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
                         {isVariable && <td>{p.alpha != null ? p.alpha : '—'}</td>}
                         <td className="tiers-cell">{formatTiers(p.pricing_tiers)}</td>
                         <td>{p.monthly_fee_eur != null ? `${p.monthly_fee_eur}€` : '—'}</td>
+                        <td>{p.duration || '—'}</td>
                         <td>{p.social_tariff ? 'Yes' : 'No'}</td>
                         <td className="actions">
                           <button className="btn-edit" onClick={() => onStartEdit(p)}>Edit</button>
@@ -441,10 +453,10 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
 }
 
 export default function PlansByCategoryTab({ serviceType, refreshKey }) {
-  const [plans, setPlans] = useState([])
-  const [providers, setProviders] = useState([])
+  const [plans, setPlans] = useState(() => cacheGet(`${CACHE_KEY_PLANS}_${serviceType}`) ?? [])
+  const [providers, setProviders] = useState(() => cacheGet(`${CACHE_KEY_PROVIDERS}_${serviceType}`) ?? [])
   const [variables, setVariables] = useState({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !cacheGet(`${CACHE_KEY_PLANS}_${serviceType}`))
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
   const [editingId, setEditingId] = useState(null)
@@ -520,6 +532,7 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
       tv: plan.tv ?? '',
       alpha: plan.alpha ?? '',
       monthly_fee_eur: plan.monthly_fee_eur ?? '',
+      duration: plan.duration ?? '',
       social_tariff: plan.social_tariff,
       pricing_tiers: parseTiers(plan.pricing_tiers)
     })
@@ -560,6 +573,7 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
         ? { base_type: 'auto', base_value: '', steps: [] }
         : null,
       monthly_fee_eur: editData.monthly_fee_eur !== '' ? safeNumber(editData.monthly_fee_eur, null) : null,
+      duration: editData.duration || null,
       social_tariff: editData.social_tariff,
       pricing_tiers: serializeTiers(editData.pricing_tiers)
     }

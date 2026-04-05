@@ -42,8 +42,10 @@ function dataUriToSvg(dataUri) {
 }
 
 export default function ProvidersTab({ serviceType, refreshKey }) {
-  const [providers, setProviders] = useState([])
-  const [loading, setLoading] = useState(true)
+  const cacheKey = `${CACHE_KEY}_${serviceType}`
+
+  const [providers, setProviders] = useState(() => cacheGet(cacheKey) ?? [])
+  const [loading, setLoading] = useState(() => !cacheGet(cacheKey))
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editData, setEditData] = useState({})
@@ -51,8 +53,6 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
   const [editLogoModal, setEditLogoModal] = useState(null)
-
-  const cacheKey = `${CACHE_KEY}_${serviceType}`
 
   const filtered = providers.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())

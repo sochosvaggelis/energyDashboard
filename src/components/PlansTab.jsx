@@ -16,22 +16,23 @@ const TARIFF_TYPES = [
 const emptyForm = {
   provider_id: '',
   plan_name: '',
-  tariff_type: TARIFF_TYPES[0]
+  tariff_type: TARIFF_TYPES[0],
+  duration: ''
 }
 
 export default function PlansTab({ serviceType, refreshKey }) {
-  const [plans, setPlans] = useState([])
+  const plansCacheKey = `${CACHE_KEY_PLANS}_${serviceType}`
+  const providersCacheKey = `${CACHE_KEY_PROVIDERS}_${serviceType}`
+
+  const [plans, setPlans] = useState(() => cacheGet(plansCacheKey) ?? [])
   const [providers, setProviders] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !cacheGet(plansCacheKey))
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editData, setEditData] = useState({})
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
-
-  const plansCacheKey = `${CACHE_KEY_PLANS}_${serviceType}`
-  const providersCacheKey = `${CACHE_KEY_PROVIDERS}_${serviceType}`
 
   const filtered = plans.filter(p =>
     p.plan_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -99,7 +100,8 @@ export default function PlansTab({ serviceType, refreshKey }) {
       provider_id: form.provider_id,
       plan_name: form.plan_name,
       tariff_type: form.tariff_type,
-      service_type: serviceType
+      service_type: serviceType,
+      duration: form.duration || null
     }
     const { error } = await supabase.from('plans').insert(insertData)
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
@@ -114,7 +116,8 @@ export default function PlansTab({ serviceType, refreshKey }) {
     setEditData({
       provider_id: plan.provider_id,
       plan_name: plan.plan_name,
-      tariff_type: plan.tariff_type
+      tariff_type: plan.tariff_type,
+      duration: plan.duration ?? ''
     })
   }
 
@@ -135,7 +138,8 @@ export default function PlansTab({ serviceType, refreshKey }) {
       .update({
         provider_id: editData.provider_id,
         plan_name: editData.plan_name,
-        tariff_type: editData.tariff_type
+        tariff_type: editData.tariff_type,
+        duration: editData.duration || null
       })
       .eq('id', id)
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
@@ -183,6 +187,7 @@ export default function PlansTab({ serviceType, refreshKey }) {
                 <th>Provider</th>
                 <th>Plan Name</th>
                 <th>Tariff Type</th>
+                <th>Διάρκεια</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -230,6 +235,20 @@ export default function PlansTab({ serviceType, refreshKey }) {
                       <span className="tariff-badge">{p.tariff_type}</span>
                     )}
                   </td>
+                  <td>
+                    {editingId === p.id ? (
+                      <input
+                        className="inline-input"
+                        type="number"
+                        min="1"
+                        value={editData.duration}
+                        onChange={e => setEditData({ ...editData, duration: e.target.value })}
+                        placeholder="π.χ. 12"
+                      />
+                    ) : (
+                      p.duration || '—'
+                    )}
+                  </td>
                   <td className="actions">
                     {editingId === p.id ? (
                       <>
@@ -246,7 +265,7 @@ export default function PlansTab({ serviceType, refreshKey }) {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan="4" className="empty-row">{search ? 'Κανένα αποτέλεσμα' : 'Δεν υπάρχουν plans'}</td></tr>
+                <tr><td colSpan="5" className="empty-row">{search ? 'Κανένα αποτέλεσμα' : 'Δεν υπάρχουν plans'}</td></tr>
               )}
             </tbody>
           </table>
@@ -289,6 +308,16 @@ export default function PlansTab({ serviceType, refreshKey }) {
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
+              </label>
+              <label>
+                Διάρκεια (μήνες)
+                <input
+                  type="number"
+                  min="1"
+                  value={form.duration}
+                  onChange={e => setForm({ ...form, duration: e.target.value })}
+                  placeholder="π.χ. 12"
+                />
               </label>
               <div className="modal-actions">
                 <button type="button" className="btn-cancel" onClick={() => setShowModal(false)}>Cancel</button>

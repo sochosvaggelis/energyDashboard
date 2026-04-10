@@ -2,6 +2,13 @@
   padding: 1rem 0;
 }
 
+.info-text-cell {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tariff-badge {
   display: inline-block;
   padding: 0.15rem 0.5rem;

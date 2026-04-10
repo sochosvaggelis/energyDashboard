@@ -23,14 +23,6 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState('electricity')
   const [refreshKey, setRefreshKey] = useState(0)
 
-  // Auto-refresh data every 10 minutes
-  useEffect(() => {
-    const id = setInterval(() => {
-      cacheClearAll()
-      setRefreshKey(k => k + 1)
-    }, 10 * 60 * 1000)
-    return () => clearInterval(id)
-  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

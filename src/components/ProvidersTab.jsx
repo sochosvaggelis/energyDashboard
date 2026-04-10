@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { cacheGet, cacheSet, cacheInvalidate } from '../lib/cache'
+import EditPanel from './EditPanel'
 import './ProvidersTab.css'
 
 const CACHE_KEY = 'admin_providers'
@@ -10,9 +11,7 @@ const safeNumber = (val, def = 0) => { const n = Number(val); return isNaN(n) ? 
 function sanitizeSvg(svg) {
   const parser = new DOMParser()
   const doc = parser.parseFromString(svg, 'image/svg+xml')
-  // Remove dangerous elements
   doc.querySelectorAll('script, foreignObject, use[href^="data:"], use[xlink\\:href^="data:"]').forEach(el => el.remove())
-  // Remove event handler attributes from all elements
   doc.querySelectorAll('*').forEach(el => {
     for (const attr of [...el.attributes]) {
       if (attr.name.startsWith('on') || attr.name === 'href' && attr.value.startsWith('javascript:')) {
@@ -47,12 +46,11 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
   const [providers, setProviders] = useState(() => cacheGet(cacheKey) ?? [])
   const [loading, setLoading] = useState(() => !cacheGet(cacheKey))
   const [showModal, setShowModal] = useState(false)
-  const [editingId, setEditingId] = useState(null)
+  const [editProvider, setEditProvider] = useState(null)
   const [editData, setEditData] = useState({})
   const [form, setForm] = useState({ name: '', adjustment_factor: '', logo_svg: '', has_gas: false })
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
-  const [editLogoModal, setEditLogoModal] = useState(null)
 
   const filtered = providers.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase())
@@ -103,44 +101,29 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
     fetchProviders(true)
   }
 
-  function startEdit(provider) {
-    setEditingId(provider.id)
+  function openEdit(provider) {
+    setEditProvider(provider)
     setEditData({
       name: provider.name,
       adjustment_factor: provider.adjustment_factor ?? '',
-      info_text: provider.info_text ?? '',
+      has_gas: provider.has_gas ?? false,
+      logo_svg: dataUriToSvg(provider.logo_url),
     })
+    setError(null)
   }
 
-  async function saveEdit(id) {
+  async function saveEdit() {
     setError(null)
+    if (!editProvider) return
     const { error } = await supabase.from('providers').update({
       name: editData.name,
       adjustment_factor: editData.adjustment_factor !== '' ? safeNumber(editData.adjustment_factor, null) : null,
-      info_text: editData.info_text || '',
-    }).eq('id', id)
+      has_gas: editData.has_gas,
+      logo_url: svgToDataUri(editData.logo_svg),
+    }).eq('id', editProvider.id)
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
-    setEditingId(null)
-    cacheInvalidate(cacheKey, 'admin_plans')
-    fetchProviders(true)
-  }
-
-  function openLogoModal(provider) {
-    setEditLogoModal({
-      id: provider.id,
-      name: provider.name,
-      svg: dataUriToSvg(provider.logo_url)
-    })
-  }
-
-  async function saveLogoEdit() {
-    setError(null)
-    const { error } = await supabase.from('providers').update({
-      logo_url: svgToDataUri(editLogoModal.svg)
-    }).eq('id', editLogoModal.id)
-    if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
-    setEditLogoModal(null)
-    cacheInvalidate(cacheKey, 'admin_plans')
+    setEditProvider(null)
+    cacheInvalidate(cacheKey, 'admin_plans', `${CACHE_KEY}_gas`, `${CACHE_KEY}_electricity`)
     fetchProviders(true)
   }
 
@@ -152,8 +135,6 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
     cacheInvalidate(cacheKey, 'admin_plans')
     fetchProviders(true)
   }
-
-  const serviceLabel = ''
 
   return (
     <div className="providers-tab">
@@ -183,7 +164,7 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
                 <th>Logo</th>
                 <th>Όνομα</th>
                 <th>Adjustment Factor</th>
-                <th>Κείμενο</th>
+
                 <th>Αέριο</th>
                 <th>Ημ/νία</th>
                 <th>Actions</th>
@@ -191,74 +172,28 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
             </thead>
             <tbody>
               {filtered.map(p => (
-                <tr key={p.id}>
-                  {editingId === p.id ? (
-                    <>
-                      <td>
-                        {p.logo_url
-                          ? <img src={p.logo_url} alt="" className="provider-logo-preview" onClick={() => openLogoModal(p)} style={{ cursor: 'pointer' }} />
-                          : <button className="btn-edit btn-small" onClick={() => openLogoModal(p)}>+ Logo</button>
-                        }
-                      </td>
-                      <td>
-                        <input
-                          className="inline-input"
-                          value={editData.name}
-                          onChange={e => setEditData({ ...editData, name: e.target.value })}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="inline-input"
-                          type="number"
-                          step="any"
-                          value={editData.adjustment_factor}
-                          onChange={e => setEditData({ ...editData, adjustment_factor: e.target.value })}
-                        />
-                      </td>
-                      <td>
-                        <textarea
-                          className="inline-input inline-textarea"
-                          value={editData.info_text}
-                          onChange={e => setEditData({ ...editData, info_text: e.target.value })}
-                          rows={2}
-                          placeholder="Κείμενο παρόχου..."
-                        />
-                      </td>
-                      <td className="center-cell">
-                        <input type="checkbox" checked={!!p.has_gas} onChange={() => toggleGas(p)} />
-                      </td>
-                      <td>{new Date(p.created_at).toLocaleDateString('el-GR')}</td>
-                      <td className="actions">
-                        <button className="btn-save" onClick={() => saveEdit(p.id)}>Save</button>
-                        <button className="btn-cancel" onClick={() => setEditingId(null)}>Cancel</button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td>
-                        {p.logo_url
-                          ? <img src={p.logo_url} alt={p.name} className="provider-logo-preview" onClick={() => openLogoModal(p)} style={{ cursor: 'pointer' }} title="Κλικ για επεξεργασία logo" />
-                          : <button className="btn-edit btn-small" onClick={() => openLogoModal(p)}>+ Logo</button>
-                        }
-                      </td>
-                      <td>{p.name}</td>
-                      <td>{p.adjustment_factor ?? '—'}</td>
-                      <td className="info-text-cell">{p.info_text || '—'}</td>
-                      <td className="center-cell">
-                        <input type="checkbox" checked={!!p.has_gas} onChange={() => toggleGas(p)} />
-                      </td>
-                      <td>{new Date(p.created_at).toLocaleDateString('el-GR')}</td>
-                      <td className="actions">
-                        <button className="btn-edit" onClick={() => startEdit(p)}>Edit</button>
-                        <button className="btn-delete" onClick={() => handleDelete(p.id)}>Delete</button>
-                      </td>
-                    </>
-                  )}
+                <tr key={p.id} className={editProvider?.id === p.id ? 'row-editing' : ''}>
+                  <td>
+                    {p.logo_url
+                      ? <img src={p.logo_url} alt={p.name} className="provider-logo-preview" />
+                      : <span className="no-logo">—</span>
+                    }
+                  </td>
+                  <td>{p.name}</td>
+                  <td>{p.adjustment_factor ?? '—'}</td>
+
+                  <td className="center-cell">
+                    <input type="checkbox" checked={!!p.has_gas} onChange={() => toggleGas(p)} />
+                  </td>
+                  <td>{new Date(p.created_at).toLocaleDateString('el-GR')}</td>
+                  <td className="actions">
+                    <button className="btn-edit" onClick={() => openEdit(p)}>Edit</button>
+                    <button className="btn-delete" onClick={() => handleDelete(p.id)}>Delete</button>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan="7" className="empty-row">{search ? 'Κανένα αποτέλεσμα' : 'Δεν υπάρχουν providers'}</td></tr>
+                <tr><td colSpan="6" className="empty-row">{search ? 'Κανένα αποτέλεσμα' : 'Δεν υπάρχουν providers'}</td></tr>
               )}
             </tbody>
           </table>
@@ -321,34 +256,74 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
         </div>
       )}
 
-      {/* Edit Logo Modal */}
-      {editLogoModal && (
-        <div className="modal-overlay" onClick={() => setEditLogoModal(null)}>
-          <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
-            <h3>Logo: {editLogoModal.name}</h3>
-            <label>
-              SVG Κώδικας
-              <textarea
-                className="svg-textarea"
-                placeholder="Κάντε paste τον SVG κώδικα εδώ (<svg>...</svg>)"
-                value={editLogoModal.svg}
-                onChange={e => setEditLogoModal({ ...editLogoModal, svg: e.target.value })}
-                rows={8}
+      {/* Edit Provider Panel */}
+      <EditPanel
+        isOpen={!!editProvider}
+        onClose={() => { setEditProvider(null); setError(null) }}
+        title={`Επεξεργασία: ${editProvider?.name || ''}`}
+        footer={
+          <>
+            <button className="btn-cancel" onClick={() => { setEditProvider(null); setError(null) }}>Ακύρωση</button>
+            <button className="btn-primary" onClick={saveEdit}>Αποθήκευση</button>
+          </>
+        }
+      >
+        {editProvider && (
+          <>
+            <div className="ep-field">
+              <label className="ep-label">Όνομα</label>
+              <input
+                className="ep-input"
+                value={editData.name}
+                onChange={e => setEditData({ ...editData, name: e.target.value })}
               />
-            </label>
-            {editLogoModal.svg && (
-              <div className="logo-preview-box">
-                <span>Preview:</span>
-                <img src={svgToDataUri(editLogoModal.svg)} alt="preview" className="logo-preview-large" />
-              </div>
-            )}
-            <div className="modal-actions">
-              <button type="button" className="btn-cancel" onClick={() => setEditLogoModal(null)}>Cancel</button>
-              <button type="button" className="btn-primary" onClick={saveLogoEdit}>Αποθήκευση</button>
             </div>
-          </div>
-        </div>
-      )}
+
+            <div className="ep-field">
+              <label className="ep-label">Adjustment Factor</label>
+              <input
+                className="ep-input"
+                type="number"
+                step="any"
+                value={editData.adjustment_factor}
+                onChange={e => setEditData({ ...editData, adjustment_factor: e.target.value })}
+              />
+            </div>
+
+            <div className="ep-field">
+              <label className="ep-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={editData.has_gas}
+                  onChange={e => setEditData({ ...editData, has_gas: e.target.checked })}
+                />
+                Και για Αέριο
+              </label>
+            </div>
+
+            <div className="ep-divider" />
+
+            <div className="ep-field">
+              <label className="ep-label">SVG Logo</label>
+              <textarea
+                className="ep-input ep-textarea svg-textarea"
+                placeholder="Κάντε paste τον SVG κώδικα (<svg>...</svg>)"
+                value={editData.logo_svg}
+                onChange={e => setEditData({ ...editData, logo_svg: e.target.value })}
+                rows={6}
+              />
+              {editData.logo_svg && (
+                <div className="ep-logo-preview-wrap">
+                  <span className="ep-logo-preview-label">Preview:</span>
+                  <img src={svgToDataUri(editData.logo_svg)} alt="preview" className="ep-logo-preview" />
+                </div>
+              )}
+            </div>
+
+            {error && <div className="error-msg">{error}</div>}
+          </>
+        )}
+      </EditPanel>
     </div>
   )
 }

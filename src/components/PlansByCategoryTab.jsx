@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { cacheGet, cacheSet, cacheInvalidate } from '../lib/cache'
 import { computeAutoPrice } from '../lib/formula'
+import EditPanel from './EditPanel'
 import './PlansByCategoryTab.css'
 
 function TruncateCell({ children }) {
@@ -134,17 +135,10 @@ function validateTiers(tiers) {
     const min = safeNumber(t.min_kwh, 0)
     const max = t.max_kwh !== '' ? safeNumber(t.max_kwh, null) : null
     const price = safeNumber(t.price_per_kwh, 0)
-    if (price < 0) {
-      errors.push(`Κλιμάκιο ${i + 1}: η τιμή δεν μπορεί να είναι αρνητική`)
-    }
-    if (min < 0) {
-      errors.push(`Κλιμάκιο ${i + 1}: το min kWh δεν μπορεί να είναι αρνητικό`)
-    }
-    if (max != null && min >= max) {
-      errors.push(`Κλιμάκιο ${i + 1}: το min kWh πρέπει να είναι μικρότερο από το max kWh`)
-    }
+    if (price < 0) errors.push(`Κλιμάκιο ${i + 1}: η τιμή δεν μπορεί να είναι αρνητική`)
+    if (min < 0) errors.push(`Κλιμάκιο ${i + 1}: το min kWh δεν μπορεί να είναι αρνητικό`)
+    if (max != null && min >= max) errors.push(`Κλιμάκιο ${i + 1}: το min kWh πρέπει να είναι μικρότερο από το max kWh`)
   }
-  // Check for overlaps between tiers
   const sorted = filled
     .map((t, i) => ({
       idx: i,
@@ -185,7 +179,7 @@ const CATEGORY_CLASSES = {
   'Δυναμικό Τιμολόγιο': 'cat-dynamic'
 }
 
-function CategoryTable({ title, plans, providers, variables, editingId, editData, onStartEdit, onSetEditData, onSaveEdit, onCancelEdit, onDelete }) {
+function CategoryTable({ title, plans, providers, variables, onStartEdit, onDelete, editingId }) {
   const [collapsed, setCollapsed] = useState(false)
   const catClass = CATEGORY_CLASSES[title] || ''
   const isVariable = title === 'Κυμαινόμενο Τιμολόγιο'
@@ -234,212 +228,25 @@ function CategoryTable({ title, plans, providers, variables, editingId, editData
             </thead>
             <tbody>
               {plans.map(p => (
-                <React.Fragment key={p.id}>
-                  <tr>
-                    {editingId === p.id ? (
-                      <>
-                        <TruncateCell>{p.providers?.name ?? '—'}</TruncateCell>
-                        <td>{p.plan_name}</td>
-                        <td>
-                          <div className="price-edit-cell">
-                            {isVariable ? (
-                              <>
-                                {editData.price_mode !== 'auto' && (
-                                  <input
-                                    className="inline-input"
-                                    type="number"
-                                    step="any"
-                                    value={editData.price_per_kwh}
-                                    onChange={e => onSetEditData({ ...editData, price_per_kwh: e.target.value })}
-                                  />
-                                )}
-                                {editData.price_mode === 'auto' && (
-                                  <span className="fx-badge">ΤΕΑ</span>
-                                )}
-                                <button
-                                  type="button"
-                                  className={`btn-mode-toggle${editData.price_mode === 'auto' ? ' active' : ''}`}
-                                  onClick={() => onSetEditData({
-                                    ...editData,
-                                    price_mode: editData.price_mode === 'auto' ? 'static' : 'auto'
-                                  })}
-                                  title="Εναλλαγή σταθερή/αυτόματη ΤΕΑ"
-                                >
-                                  ΤΕΑ
-                                </button>
-                              </>
-                            ) : (
-                              <input
-                                className="inline-input"
-                                type="number"
-                                step="any"
-                                value={editData.price_per_kwh}
-                                onChange={e => onSetEditData({ ...editData, price_per_kwh: e.target.value })}
-                              />
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="price-edit-cell">
-                            {isVariable ? (
-                              <>
-                                {editData.night_price_mode !== 'auto' && (
-                                  <input
-                                    className="inline-input"
-                                    type="number"
-                                    step="any"
-                                    value={editData.night_price_per_kwh}
-                                    onChange={e => onSetEditData({ ...editData, night_price_per_kwh: e.target.value })}
-                                  />
-                                )}
-                                {editData.night_price_mode === 'auto' && (
-                                  <span className="fx-badge">ΤΕΑ</span>
-                                )}
-                                <button
-                                  type="button"
-                                  className={`btn-mode-toggle${editData.night_price_mode === 'auto' ? ' active' : ''}`}
-                                  onClick={() => onSetEditData({
-                                    ...editData,
-                                    night_price_mode: editData.night_price_mode === 'auto' ? 'static' : 'auto'
-                                  })}
-                                  title="Εναλλαγή σταθερή/αυτόματη ΤΕΑ"
-                                >
-                                  ΤΕΑ
-                                </button>
-                              </>
-                            ) : (
-                              <input
-                                className="inline-input"
-                                type="number"
-                                step="any"
-                                value={editData.night_price_per_kwh}
-                                onChange={e => onSetEditData({ ...editData, night_price_per_kwh: e.target.value })}
-                              />
-                            )}
-                          </div>
-                        </td>
-                        {isVariable && (() => {
-                          const teaReq = editData.price_mode === 'auto' || editData.night_price_mode === 'auto'
-                          const globalTea = variables.TEA ?? variables.tea ?? ''
-                          return (<>
-                            <td>
-                              <input
-                                className="inline-input"
-                                type="number"
-                                step="any"
-                                value={editData.tea}
-                                placeholder={globalTea !== '' ? globalTea : '—'}
-                                onChange={e => onSetEditData({ ...editData, tea: e.target.value })}
-                                title={globalTea !== '' ? `Default: ${globalTea}` : 'Ορίστε ΤΕΑ στα Settings'}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                className={`inline-input${teaReq ? ' tea-required' : ''}`}
-                                type="number"
-                                step="any"
-                                value={editData.ll}
-                                onChange={e => onSetEditData({ ...editData, ll: e.target.value })}
-                                required={teaReq}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                className={`inline-input${teaReq ? ' tea-required' : ''}`}
-                                type="number"
-                                step="any"
-                                value={editData.lu}
-                                onChange={e => onSetEditData({ ...editData, lu: e.target.value })}
-                                required={teaReq}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                className={`inline-input${teaReq ? ' tea-required' : ''}`}
-                                type="number"
-                                step="any"
-                                value={editData.tv}
-                                onChange={e => onSetEditData({ ...editData, tv: e.target.value })}
-                                required={teaReq}
-                              />
-                            </td>
-                            <td>
-                              <input
-                                className={`inline-input${teaReq ? ' tea-required' : ''}`}
-                                type="number"
-                                step="any"
-                                value={editData.alpha}
-                                onChange={e => onSetEditData({ ...editData, alpha: e.target.value })}
-                                required={teaReq}
-                              />
-                            </td>
-                          </>)
-                        })()}
-                        <td className="tiers-cell">{formatTiers(editData.pricing_tiers)}</td>
-                        <td>
-                          <input
-                            className="inline-input"
-                            type="number"
-                            step="any"
-                            value={editData.monthly_fee_eur}
-                            onChange={e => onSetEditData({ ...editData, monthly_fee_eur: e.target.value })}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="inline-input"
-                            type="number"
-                            min="1"
-                            value={editData.duration}
-                            onChange={e => onSetEditData({ ...editData, duration: e.target.value })}
-                            placeholder="π.χ. 12"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={editData.social_tariff}
-                            onChange={e => onSetEditData({ ...editData, social_tariff: e.target.checked })}
-                          />
-                        </td>
-                        <td className="actions">
-                          <button className="btn-save" onClick={() => onSaveEdit(p.id)}>Save</button>
-                          <button className="btn-cancel" onClick={onCancelEdit}>Cancel</button>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <TruncateCell>{p.providers?.name ?? '—'}</TruncateCell>
-                        <td>{p.plan_name}</td>
-                        <td>{displayPrice(p, getVarsForProvider(p.provider_id))}</td>
-                        <td>{displayNightPrice(p, getVarsForProvider(p.provider_id))}</td>
-                        {isVariable && <td>{p.tea != null ? p.tea : <span className="tea-default">{variables.TEA ?? variables.tea ?? '—'}</span>}</td>}
-                        {isVariable && <td>{p.ll != null ? p.ll : '—'}</td>}
-                        {isVariable && <td>{p.lu != null ? p.lu : '—'}</td>}
-                        {isVariable && <td>{p.tv != null ? p.tv : '—'}</td>}
-                        {isVariable && <td>{p.alpha != null ? p.alpha : '—'}</td>}
-                        <td className="tiers-cell">{formatTiers(p.pricing_tiers)}</td>
-                        <td>{p.monthly_fee_eur != null ? `${p.monthly_fee_eur}€` : '—'}</td>
-                        <td>{p.duration || '—'}</td>
-                        <td>{p.social_tariff ? 'Yes' : 'No'}</td>
-                        <td className="actions">
-                          <button className="btn-edit" onClick={() => onStartEdit(p)}>Edit</button>
-                          <button className="btn-delete" onClick={() => onDelete(p.id)}>Delete</button>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                  {editingId === p.id && (
-                    <tr className="tier-edit-row">
-                      <td colSpan={colCount}>
-                        <TierEditor
-                          tiers={editData.pricing_tiers}
-                          onChange={tiers => onSetEditData({ ...editData, pricing_tiers: tiers })}
-                        />
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                <tr key={p.id} className={editingId === p.id ? 'row-editing' : ''}>
+                  <TruncateCell>{p.providers?.name ?? '—'}</TruncateCell>
+                  <td>{p.plan_name}</td>
+                  <td>{displayPrice(p, getVarsForProvider(p.provider_id))}</td>
+                  <td>{displayNightPrice(p, getVarsForProvider(p.provider_id))}</td>
+                  {isVariable && <td>{p.tea != null ? p.tea : <span className="tea-default">{variables.TEA ?? variables.tea ?? '—'}</span>}</td>}
+                  {isVariable && <td>{p.ll != null ? p.ll : '—'}</td>}
+                  {isVariable && <td>{p.lu != null ? p.lu : '—'}</td>}
+                  {isVariable && <td>{p.tv != null ? p.tv : '—'}</td>}
+                  {isVariable && <td>{p.alpha != null ? p.alpha : '—'}</td>}
+                  <td className="tiers-cell">{formatTiers(p.pricing_tiers)}</td>
+                  <td>{p.monthly_fee_eur != null ? `${p.monthly_fee_eur}€` : '—'}</td>
+                  <td>{p.duration || '—'}</td>
+                  <td>{p.social_tariff ? 'Yes' : 'No'}</td>
+                  <td className="actions">
+                    <button className="btn-edit" onClick={() => onStartEdit(p)}>Edit</button>
+                    <button className="btn-delete" onClick={() => onDelete(p.id)}>Delete</button>
+                  </td>
+                </tr>
               ))}
               {plans.length === 0 && (
                 <tr><td colSpan={colCount} className="empty-row">Δεν υπάρχουν plans σε αυτή την κατηγορία</td></tr>
@@ -459,7 +266,7 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
   const [loading, setLoading] = useState(() => !cacheGet(`${CACHE_KEY_PLANS}_${serviceType}`))
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
-  const [editingId, setEditingId] = useState(null)
+  const [editPlan, setEditPlan] = useState(null)
   const [editData, setEditData] = useState({})
   const [showInfo, setShowInfo] = useState(false)
 
@@ -485,7 +292,6 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
       setProviders(cached.map(p => ({ id: p.id, name: p.name, adjustment_factor: p.adjustment_factor })))
       return
     }
-    // Get provider IDs that have at least one plan for this service type
     const { data: planRows } = await supabase
       .from('plans')
       .select('provider_id')
@@ -517,9 +323,9 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
     setLoading(false)
   }
 
-  function startEdit(plan) {
+  function openEdit(plan) {
     const isVar = plan.tariff_type === 'Κυμαινόμενο Τιμολόγιο'
-    setEditingId(plan.id)
+    setEditPlan(plan)
     setEditData({
       provider_id: plan.provider_id,
       price_per_kwh: plan.price_per_kwh ?? '',
@@ -534,12 +340,15 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
       monthly_fee_eur: plan.monthly_fee_eur ?? '',
       duration: plan.duration ?? '',
       social_tariff: plan.social_tariff,
-      pricing_tiers: parseTiers(plan.pricing_tiers)
+      pricing_tiers: parseTiers(plan.pricing_tiers),
+      info_text: plan.info_text ?? ''
     })
+    setError(null)
   }
 
-  async function saveEdit(id) {
+  async function saveEdit() {
     setError(null)
+    if (!editPlan) return
     const teaActive = editData.price_mode === 'auto' || editData.night_price_mode === 'auto'
     if (teaActive) {
       const missing = []
@@ -552,7 +361,6 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
         return
       }
     }
-    // Tier validation
     const tierErrors = validateTiers(editData.pricing_tiers)
     if (tierErrors.length > 0) {
       setError(tierErrors.join('. '))
@@ -575,11 +383,12 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
       monthly_fee_eur: editData.monthly_fee_eur !== '' ? safeNumber(editData.monthly_fee_eur, null) : null,
       duration: editData.duration || null,
       social_tariff: editData.social_tariff,
-      pricing_tiers: serializeTiers(editData.pricing_tiers)
+      pricing_tiers: serializeTiers(editData.pricing_tiers),
+      info_text: editData.info_text || null
     }
-    const { error } = await supabase.from('plans').update(updateData).eq('id', id)
+    const { error } = await supabase.from('plans').update(updateData).eq('id', editPlan.id)
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
-    setEditingId(null)
+    setEditPlan(null)
     cacheInvalidate(CACHE_KEY_PLANS)
     fetchPlans(true)
   }
@@ -602,6 +411,10 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
     acc[type] = filtered.filter(p => p.tariff_type === type)
     return acc
   }, {})
+
+  const isVariable = editPlan?.tariff_type === 'Κυμαινόμενο Τιμολόγιο'
+  const teaActive = editData.price_mode === 'auto' || editData.night_price_mode === 'auto'
+  const globalTea = variables.TEA ?? variables.tea ?? ''
 
   return (
     <div className="plans-by-category-tab">
@@ -633,13 +446,9 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
                   plans={grouped[type]}
                   providers={providers}
                   variables={variables}
-                  editingId={editingId}
-                  editData={editData}
-                  onStartEdit={startEdit}
-                  onSetEditData={setEditData}
-                  onSaveEdit={saveEdit}
-                  onCancelEdit={() => { setEditingId(null); setError(null) }}
+                  onStartEdit={openEdit}
                   onDelete={handleDelete}
+                  editingId={editPlan?.id}
                 />
               ))}
             </div>
@@ -684,6 +493,204 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
           </aside>
         )}
       </div>
+
+      {/* Edit Plan Panel */}
+      <EditPanel
+        isOpen={!!editPlan}
+        onClose={() => { setEditPlan(null); setError(null) }}
+        title={editPlan ? `${editPlan.plan_name}` : ''}
+        width="560px"
+        footer={
+          <>
+            <button className="btn-cancel" onClick={() => { setEditPlan(null); setError(null) }}>Ακύρωση</button>
+            <button className="btn-primary" onClick={saveEdit}>Αποθήκευση</button>
+          </>
+        }
+      >
+        {editPlan && (
+          <>
+            <div className="ep-section-title">{editPlan.providers?.name ?? ''} — {editPlan.tariff_type}</div>
+
+            {/* Price / kWh */}
+            <div className="ep-field">
+              <label className="ep-label">Price / kWh</label>
+              {isVariable && editData.price_mode === 'auto' ? (
+                <span className="ep-fx-badge">ΤΕΑ (αυτόματο)</span>
+              ) : (
+                <input
+                  className="ep-input"
+                  type="number"
+                  step="any"
+                  value={editData.price_per_kwh}
+                  onChange={e => setEditData({ ...editData, price_per_kwh: e.target.value })}
+                />
+              )}
+              {isVariable && (
+                <button
+                  type="button"
+                  className={`ep-mode-toggle${editData.price_mode === 'auto' ? ' active' : ''}`}
+                  onClick={() => setEditData({
+                    ...editData,
+                    price_mode: editData.price_mode === 'auto' ? 'static' : 'auto'
+                  })}
+                >
+                  {editData.price_mode === 'auto' ? '✓ Αυτόματο ΤΕΑ' : 'Χρήση ΤΕΑ'}
+                </button>
+              )}
+            </div>
+
+            {/* Night price / kWh */}
+            <div className="ep-field">
+              <label className="ep-label">Night Price / kWh</label>
+              {isVariable && editData.night_price_mode === 'auto' ? (
+                <span className="ep-fx-badge">ΤΕΑ (αυτόματο)</span>
+              ) : (
+                <input
+                  className="ep-input"
+                  type="number"
+                  step="any"
+                  value={editData.night_price_per_kwh}
+                  onChange={e => setEditData({ ...editData, night_price_per_kwh: e.target.value })}
+                />
+              )}
+              {isVariable && (
+                <button
+                  type="button"
+                  className={`ep-mode-toggle${editData.night_price_mode === 'auto' ? ' active' : ''}`}
+                  onClick={() => setEditData({
+                    ...editData,
+                    night_price_mode: editData.night_price_mode === 'auto' ? 'static' : 'auto'
+                  })}
+                >
+                  {editData.night_price_mode === 'auto' ? '✓ Αυτόματο ΤΕΑ' : 'Χρήση ΤΕΑ'}
+                </button>
+              )}
+            </div>
+
+            {/* ΤΕΑ fields — only for variable plans */}
+            {isVariable && (
+              <>
+                <div className="ep-divider" />
+                <div className="ep-section-title">Μεταβλητές ΤΕΑ</div>
+
+                <div className="ep-grid-2">
+                  <div className="ep-field">
+                    <label className="ep-label">ΤΕΑ</label>
+                    <input
+                      className="ep-input"
+                      type="number"
+                      step="any"
+                      value={editData.tea}
+                      placeholder={globalTea !== '' ? String(globalTea) : '—'}
+                      onChange={e => setEditData({ ...editData, tea: e.target.value })}
+                      title={globalTea !== '' ? `Default: ${globalTea}` : 'Ορίστε ΤΕΑ στα Settings'}
+                    />
+                  </div>
+                  <div className="ep-field">
+                    <label className="ep-label">Ll {teaActive && <span style={{ color: 'var(--accent)' }}>*</span>}</label>
+                    <input
+                      className="ep-input"
+                      type="number"
+                      step="any"
+                      value={editData.ll}
+                      onChange={e => setEditData({ ...editData, ll: e.target.value })}
+                    />
+                  </div>
+                  <div className="ep-field">
+                    <label className="ep-label">Lu {teaActive && <span style={{ color: 'var(--accent)' }}>*</span>}</label>
+                    <input
+                      className="ep-input"
+                      type="number"
+                      step="any"
+                      value={editData.lu}
+                      onChange={e => setEditData({ ...editData, lu: e.target.value })}
+                    />
+                  </div>
+                  <div className="ep-field">
+                    <label className="ep-label">Τβ {teaActive && <span style={{ color: 'var(--accent)' }}>*</span>}</label>
+                    <input
+                      className="ep-input"
+                      type="number"
+                      step="any"
+                      value={editData.tv}
+                      onChange={e => setEditData({ ...editData, tv: e.target.value })}
+                    />
+                  </div>
+                  <div className="ep-field">
+                    <label className="ep-label">α {teaActive && <span style={{ color: 'var(--accent)' }}>*</span>}</label>
+                    <input
+                      className="ep-input"
+                      type="number"
+                      step="any"
+                      value={editData.alpha}
+                      onChange={e => setEditData({ ...editData, alpha: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="ep-divider" />
+
+            {/* Tier editor */}
+            <TierEditor
+              tiers={editData.pricing_tiers}
+              onChange={tiers => setEditData({ ...editData, pricing_tiers: tiers })}
+            />
+
+            <div className="ep-divider" />
+
+            {/* Other fields */}
+            <div className="ep-grid-2">
+              <div className="ep-field">
+                <label className="ep-label">Monthly Fee (€)</label>
+                <input
+                  className="ep-input"
+                  type="number"
+                  step="any"
+                  value={editData.monthly_fee_eur}
+                  onChange={e => setEditData({ ...editData, monthly_fee_eur: e.target.value })}
+                />
+              </div>
+              <div className="ep-field">
+                <label className="ep-label">Διάρκεια (μήνες)</label>
+                <input
+                  className="ep-input"
+                  type="number"
+                  min="1"
+                  value={editData.duration}
+                  onChange={e => setEditData({ ...editData, duration: e.target.value })}
+                  placeholder="π.χ. 12"
+                />
+              </div>
+            </div>
+
+            <div className="ep-field">
+              <label className="ep-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={!!editData.social_tariff}
+                  onChange={e => setEditData({ ...editData, social_tariff: e.target.checked })}
+                />
+                Κοινωνικό τιμολόγιο
+              </label>
+            </div>
+
+            <div className="ep-field">
+              <label className="ep-label">Κείμενο Πακέτου</label>
+              <textarea
+                className="ep-input ep-textarea"
+                value={editData.info_text}
+                onChange={e => setEditData({ ...editData, info_text: e.target.value })}
+                rows={3}
+                placeholder="Κείμενο που εμφανίζεται στο frontend..."
+              />
+            </div>
+
+            {error && <div className="error-msg">{error}</div>}
+          </>
+        )}
+      </EditPanel>
     </div>
   )
 }

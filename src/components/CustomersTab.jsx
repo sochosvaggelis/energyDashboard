@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { cacheGet, cacheSet } from '../lib/cache'
 import { logAction } from '../lib/audit'
+import EditPanel from './EditPanel'
 import './CustomersTab.css'
 
 const CACHE_KEY = 'admin_customers'
@@ -64,7 +65,6 @@ function FileThumb({ pathOrUrl, label, index, onLightbox, resolveFileUrl }) {
   useEffect(() => {
     if (!pathOrUrl) return
     if (!pathOrUrl.startsWith('http')) {
-      // Storage path — resolve to signed URL
       let cancelled = false
       setFailed(false)
       resolveFileUrl(pathOrUrl).then(resolved => {
@@ -104,26 +104,25 @@ export default function CustomersTab({ user, refreshKey }) {
   const [loading, setLoading] = useState(() => !cacheGet(CACHE_KEY))
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
-  const [expandedId, setExpandedId] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [serviceFilter, setServiceFilter] = useState('all')
   const [lightbox, setLightbox] = useState(null)
-  const [notesId, setNotesId] = useState(null)
-  const [noteText, setNoteText] = useState('')
-  const [notesSaving, setNotesSaving] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const [statusChange, setStatusChange] = useState(null) // { id, oldStatus, newStatus }
+
+  // Panel state
+  const [editCustomer, setEditCustomer] = useState(null)
+  const [activeTab, setActiveTab] = useState('details') // 'details' | 'history'
+  const [pendingStatus, setPendingStatus] = useState(null)
   const [statusComment, setStatusComment] = useState('')
   const [statusSaving, setStatusSaving] = useState(false)
-  const [historyId, setHistoryId] = useState(null)
+  const [noteText, setNoteText] = useState('')
+  const [notesSaving, setNotesSaving] = useState(false)
   const notesEndRef = useRef(null)
 
   const ROWS_PER_PAGE = 25
 
-  const notesSub = notesId ? submissions.find(s => s.id === notesId) : null
-  const notes = notesSub?.notes || []
+  const notes = editCustomer?.notes || []
 
-  // Reset to page 1 when search or filter changes
   useEffect(() => {
     setCurrentPage(1)
   }, [search, statusFilter, serviceFilter])
@@ -170,28 +169,28 @@ export default function CustomersTab({ user, refreshKey }) {
       })
   }, [refreshKey])
 
-  // Realtime: auto-update when submissions change
+  // Realtime subscription
   useEffect(() => {
     const channel = supabase
       .channel('submissions-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, (payload) => {
         setSubmissions(prev => {
-          if (payload.eventType === 'INSERT') {
-            return [payload.new, ...prev]
-          }
-          if (payload.eventType === 'UPDATE') {
-            return prev.map(s => s.id === payload.new.id ? payload.new : s)
-          }
-          if (payload.eventType === 'DELETE') {
-            return prev.filter(s => s.id !== payload.old.id)
-          }
+          if (payload.eventType === 'INSERT') return [payload.new, ...prev]
+          if (payload.eventType === 'UPDATE') return prev.map(s => s.id === payload.new.id ? payload.new : s)
+          if (payload.eventType === 'DELETE') return prev.filter(s => s.id !== payload.old.id)
           return prev
         })
       })
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [])
+
+  // Sync editCustomer when submissions update (realtime)
+  useEffect(() => {
+    if (!editCustomer) return
+    const updated = submissions.find(s => s.id === editCustomer.id)
+    if (updated) setEditCustomer(updated)
+  }, [submissions])
 
   useEffect(() => {
     if (notesEndRef.current) {
@@ -215,54 +214,55 @@ export default function CustomersTab({ user, refreshKey }) {
     setLoading(false)
   }
 
-  function requestStatusChange(id, newStatus) {
-    const sub = submissions.find(s => s.id === id)
-    const oldStatus = sub?.status || 'Νέο'
-    if (oldStatus === newStatus) return
-    setStatusChange({ id, oldStatus, newStatus })
+  function openPanel(sub, tab = 'details') {
+    setEditCustomer(sub)
+    setActiveTab(tab)
+    setPendingStatus(null)
     setStatusComment('')
+    setNoteText('')
   }
 
   async function confirmStatusChange() {
-    if (!statusChange) return
+    if (!editCustomer || !pendingStatus) return
     setStatusSaving(true)
     setError(null)
-    const { id, oldStatus, newStatus } = statusChange
-    const sub = submissions.find(s => s.id === id)
-    const history = sub?.status_history || []
+    const { id } = editCustomer
+    const oldStatus = editCustomer.status || 'Νέο'
+    const history = editCustomer.status_history || []
     const author = user?.user_metadata?.display_name || user?.email || 'Άγνωστος'
     const entry = {
       from: oldStatus,
-      to: newStatus,
+      to: pendingStatus,
       comment: statusComment.trim() || null,
       author,
       changed_at: new Date().toISOString()
     }
 
-    const isLocking = lockedStatuses.includes(newStatus)
+    const isLocking = lockedStatuses.includes(pendingStatus)
     const { data, error } = await supabase
       .from('submissions')
-      .update({ status: newStatus, status_history: [...history, entry], ...(isLocking ? { locked: true } : {}) })
+      .update({ status: pendingStatus, status_history: [...history, entry], ...(isLocking ? { locked: true } : {}) })
       .eq('id', id)
       .select()
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); setStatusSaving(false); return }
-    logAction('update_status', { entity: 'submission', entityId: id, details: { status: newStatus, comment: entry.comment } })
+    logAction('update_status', { entity: 'submission', entityId: id, details: { status: pendingStatus, comment: entry.comment } })
     const row = data?.[0]
     if (row) {
       const updated = submissions.map(s => s.id === id ? row : s)
       setSubmissions(updated)
       cacheSet(CACHE_KEY, updated)
+      setEditCustomer(row)
     }
-    setStatusChange(null)
+    setPendingStatus(null)
     setStatusComment('')
     setStatusSaving(false)
   }
 
-  async function addNote(id) {
-    if (!noteText.trim()) return
+  async function addNote() {
+    if (!noteText.trim() || !editCustomer) return
     setNotesSaving(true)
-    const sub = submissions.find(s => s.id === id)
-    const currentNotes = sub?.notes || []
+    const id = editCustomer.id
+    const currentNotes = editCustomer.notes || []
     const author = user?.user_metadata?.display_name || user?.email || 'Άγνωστος'
     const newNote = { text: noteText.trim(), author, created_at: new Date().toISOString() }
     const updatedNotes = [...currentNotes, newNote]
@@ -279,28 +279,30 @@ export default function CustomersTab({ user, refreshKey }) {
       const updated = submissions.map(s => s.id === id ? row : s)
       setSubmissions(updated)
       cacheSet(CACHE_KEY, updated)
+      setEditCustomer(row)
     }
     setNoteText('')
     setNotesSaving(false)
   }
 
-  async function deleteNote(subId, noteIndex) {
-    const sub = submissions.find(s => s.id === subId)
-    const currentNotes = sub?.notes || []
-    const updatedNotes = currentNotes.filter((_, i) => i !== noteIndex)
+  async function deleteNote(noteIndex) {
+    if (!editCustomer) return
+    const id = editCustomer.id
+    const updatedNotes = (editCustomer.notes || []).filter((_, i) => i !== noteIndex)
 
     const { data, error } = await supabase
       .from('submissions')
       .update({ notes: updatedNotes })
-      .eq('id', subId)
+      .eq('id', id)
       .select()
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
 
     const row = data?.[0]
     if (row) {
-      const updated = submissions.map(s => s.id === subId ? row : s)
+      const updated = submissions.map(s => s.id === id ? row : s)
       setSubmissions(updated)
       cacheSet(CACHE_KEY, updated)
+      setEditCustomer(row)
     }
   }
 
@@ -347,12 +349,15 @@ export default function CustomersTab({ user, refreshKey }) {
     return data.signedUrl
   }, [])
 
-  function openNotes(e, id) {
-    e.stopPropagation()
-    setNotesId(id)
-    setNoteText('')
-  }
-
+  // Panel tab content
+  const panelLead = editCustomer?.lead_info || {}
+  const panelElec = editCustomer?.electricity_info || {}
+  const panelPlan = editCustomer?.selected_plan || {}
+  const panelDetail = editCustomer?.detail_form || {}
+  const panelFiles = editCustomer?.uploaded_files || {}
+  const hasFiles = Object.values(panelFiles).some(v => v && (Array.isArray(v) ? v.length > 0 : true))
+  const currentStatus = editCustomer?.status || 'Νέο'
+  const statusHistory = editCustomer?.status_history || []
 
   return (
     <div className="customers-tab">
@@ -370,7 +375,7 @@ export default function CustomersTab({ user, refreshKey }) {
           Και τα 2
         </button>
       </nav>
-      {/* Header toolbar */}
+
       <div className="ct-toolbar">
         <div className="ct-toolbar-left">
           <h2>Πελάτες</h2>
@@ -437,234 +442,74 @@ export default function CustomersTab({ user, refreshKey }) {
             <tbody>
               {paginatedFiltered.map((s, idx) => {
                 const lead = s.lead_info || {}
-                const elec = s.electricity_info || {}
                 const plan = s.selected_plan || {}
-                const detail = s.detail_form || {}
-                const files = s.uploaded_files || {}
-                const isExpanded = expandedId === s.id
                 const status = s.status || 'Νέο'
-                const hasFiles = Object.values(files).some(v => v && (Array.isArray(v) ? v.length > 0 : true))
                 const noteCount = (s.notes || []).length
 
                 return (
-                  <React.Fragment key={s.id}>
-                    <tr
-                      className={`ct-row ${isExpanded ? 'ct-row-expanded' : ''}`}
-                      onClick={() => setExpandedId(isExpanded ? null : s.id)}
-                    >
-                      <td className="td-num">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</td>
-                      <td className="td-name">{lead.name || 'Χωρίς όνομα'}</td>
-                      <td>
-                        {(() => {
-                          const st = lead.service_type || plan.service_type
-                          if (!st) return '—'
-                          return (
-                            <span className={`ct-service-badge ct-service-${st}`}>
-                              <i className={`fa-solid ${SERVICE_TYPE_ICONS[st] || 'fa-bolt'}`}></i>
-                              {SERVICE_TYPE_LABELS[st] || st}
-                            </span>
-                          )
-                        })()}
-                      </td>
-                      <td>
-                        {lead.phone ? (
-                          <a href={`tel:${lead.phone}`} className="ct-phone" onClick={e => e.stopPropagation()}>
-                            <i className="fa-solid fa-phone"></i> {lead.phone}
-                          </a>
-                        ) : '—'}
-                      </td>
-                      <td>
-                        {lead.email ? (
-                          <a href={`mailto:${lead.email}`} className="ct-email" onClick={e => e.stopPropagation()}>
-                            {lead.email}
-                          </a>
-                        ) : '—'}
-                      </td>
-                      <td>{REGION_LABELS[lead.region] || lead.region || '—'}</td>
-                      <td>
-                        {plan.provider
-                          ? <span className="ct-plan-badge">{plan.provider} – {plan.plan}</span>
-                          : '—'}
-                      </td>
-                      <td>
-                        <span className={`ct-status-badge ${getStatusClass(status)}`}>
-                          {s.locked && (
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:'4px',verticalAlign:'middle'}}>
-                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                            </svg>
-                          )}
-                          {status}
-                        </span>
-                      </td>
-                      <td className="td-date" title={formatDate(s.submitted_at)}>{timeAgo(s.submitted_at)}</td>
-                      <td className="td-notes">
-                        <button className="ct-notes-btn" onClick={e => openNotes(e, s.id)}>
-                          <i className={`fa-${noteCount > 0 ? 'solid' : 'regular'} fa-comment`}></i>
-                          {noteCount > 0 && <span className="ct-notes-count">{noteCount}</span>}
-                        </button>
-                      </td>
-                      <td className="td-expand">
-                        <i className={`fa-solid fa-chevron-${isExpanded ? 'up' : 'down'} ct-expand-icon`}></i>
-                      </td>
-                    </tr>
-
-                    {isExpanded && (
-                      <tr className="ct-expanded-row">
-                        <td colSpan="11">
-                          <div className="ct-card-body">
-                            <div className="ct-detail-grid">
-                              {/* Contact info */}
-                              <div className="ct-section">
-                                <h4><i className="fa-solid fa-user"></i> Στοιχεία Επικοινωνίας</h4>
-                                <dl>
-                                  <dt>Όνομα</dt><dd>{lead.name || '—'}</dd>
-                                  <dt>Τηλέφωνο</dt><dd><a href={`tel:${lead.phone}`}>{lead.phone || '—'}</a></dd>
-                                  <dt>Email</dt><dd>{lead.email || '—'}</dd>
-                                  <dt>Περιοχή</dt><dd>{REGION_LABELS[lead.region] || lead.region || '—'}</dd>
-                                  <dt>Ώρα επικοινωνίας</dt><dd>{CONTACT_TIME_LABELS[lead.contact_time] || lead.contact_time || '—'}</dd>
-                                </dl>
-                              </div>
-
-                              {/* Electricity info */}
-                              <div className="ct-section">
-                                <h4><i className="fa-solid fa-bolt"></i> Πληροφορίες Ρεύματος</h4>
-                                <dl>
-                                  <dt>Τύπος πελάτη</dt><dd>{CUSTOMER_TYPE_LABELS[elec.customer_type] || elec.customer_type || '—'}</dd>
-                                  <dt>Νυχτερινό</dt><dd>{elec.night_tariff === 'yes' ? 'Ναι' : elec.night_tariff === 'no' ? 'Όχι' : '—'}</dd>
-                                  <dt>Κοινωνικό</dt><dd>{elec.social_tariff === 'yes' ? 'Ναι' : elec.social_tariff === 'no' ? 'Όχι' : '—'}</dd>
-                                  <dt>Τωρινός πάροχος</dt><dd>{elec.current_provider || '—'}</dd>
-                                  <dt>Κατανάλωση</dt><dd>{elec.kwh_consumption ? `${elec.kwh_consumption} kWh` : '—'}</dd>
-                                  {elec.night_kwh_consumption > 0 && (
-                                    <><dt>Νυχτερινή κατανάλωση</dt><dd>{elec.night_kwh_consumption} kWh</dd></>
-                                  )}
-                                </dl>
-                              </div>
-
-                              {/* Selected plan */}
-                              {plan.provider && (
-                                <div className="ct-section">
-                                  <h4><i className="fa-solid fa-file-invoice"></i> Επιλεγμένο Πλάνο</h4>
-                                  <dl>
-                                    <dt>Πάροχος</dt><dd>{plan.provider}</dd>
-                                    <dt>Πλάνο</dt><dd>{plan.plan}</dd>
-                                    <dt>Τύπος τιμολογίου</dt><dd>{plan.tariff_type || '—'}</dd>
-                                    <dt>Τιμή/kWh</dt><dd>{plan.price_per_kwh != null ? `${plan.price_per_kwh} €` : '—'}</dd>
-                                    {plan.night_price_per_kwh != null && (
-                                      <><dt>Νυχτ. τιμή/kWh</dt><dd>{plan.night_price_per_kwh} €</dd></>
-                                    )}
-                                    <dt>Πάγιο</dt><dd>{plan.monthly_fee_eur != null ? `${plan.monthly_fee_eur} €` : '—'}</dd>
-                                  </dl>
-                                </div>
-                              )}
-
-                              {/* Detail form */}
-                              {(detail.afm || detail.doy) && (
-                                <div className="ct-section">
-                                  <h4><i className="fa-solid fa-id-card"></i> Λοιπά Στοιχεία</h4>
-                                  <dl>
-                                    <dt>ΑΦΜ</dt><dd>{detail.afm || '—'}</dd>
-                                    <dt>ΔΟΥ</dt><dd>{detail.doy || '—'}</dd>
-                                    <dt>Πάγια εντολή</dt><dd>{detail.pagia_entoli ? 'Ναι' : 'Όχι'}</dd>
-                                    {detail.iban && <><dt>IBAN</dt><dd>{detail.iban}</dd></>}
-                                    {detail.onoma_dikaiouhou && <><dt>Δικαιούχος</dt><dd>{detail.onoma_dikaiouhou}</dd></>}
-                                    {detail.onoma_trapezas && <><dt>Τράπεζα</dt><dd>{detail.onoma_trapezas}</dd></>}
-                                    <dt>Αλλαγή ονόματος</dt><dd>{detail.allagi_onomatos ? 'Ναι' : 'Όχι'}</dd>
-                                    <dt>Ιδιοκτησία</dt><dd>{detail.idiotita || '—'}</dd>
-                                  </dl>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Uploaded files */}
-                            {hasFiles && (
-                              <div className="ct-files-section">
-                                <h4><i className="fa-solid fa-images"></i> Αρχεία / Φωτογραφίες</h4>
-                                <div className="ct-files-grid">
-                                  {Object.entries(FILE_LABELS).map(([key, label]) => {
-                                    const urls = files[key]
-                                    if (!urls || (Array.isArray(urls) && urls.length === 0)) return null
-                                    const list = Array.isArray(urls) ? urls : [urls]
-                                    return (
-                                      <div key={key} className="ct-file-group">
-                                        <span className="ct-file-label">{label}</span>
-                                        <div className="ct-file-previews">
-                                          {list.map((item, i) => (
-                                            <FileThumb
-                                              key={i}
-                                              pathOrUrl={item}
-                                              label={label}
-                                              index={i}
-                                              onLightbox={setLightbox}
-                                              resolveFileUrl={resolveFileUrl}
-                                            />
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Card actions */}
-                            <div className="ct-card-actions">
-                              <div className="ct-action-left">
-                                <label className="ct-status-label">Status:</label>
-                                <select
-                                  className={`status-select ${getStatusClass(status)}`}
-                                  value={status}
-                                  onChange={e => { e.stopPropagation(); requestStatusChange(s.id, e.target.value) }}
-                                >
-                                  {(statusOptions || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </select>
-                                {(s.status_history || []).length > 0 && (
-                                  <button
-                                    className="ct-history-btn"
-                                    onClick={e => { e.stopPropagation(); setHistoryId(historyId === s.id ? null : s.id) }}
-                                    title="Ιστορικό status"
-                                  >
-                                    <i className="fa-solid fa-clock-rotate-left"></i>
-                                    <span>{(s.status_history || []).length}</span>
-                                  </button>
-                                )}
-                              </div>
-                              <div className="ct-action-right">
-                                <span className="ct-submitted-date">
-                                  <i className="fa-regular fa-clock"></i> {formatDate(s.submitted_at)}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Status history timeline */}
-                            {historyId === s.id && (s.status_history || []).length > 0 && (
-                              <div className="ct-history-section">
-                                <h4><i className="fa-solid fa-clock-rotate-left"></i> Ιστορικό Status</h4>
-                                <div className="ct-history-timeline">
-                                  {(s.status_history || []).map((h, i) => (
-                                    <div key={i} className="ct-history-entry">
-                                      <div className="ct-history-dot" />
-                                      <div className="ct-history-content">
-                                        <div className="ct-history-header">
-                                          <span className={`ct-status-badge ${getStatusClass(h.from)}`}>{h.from}</span>
-                                          <i className="fa-solid fa-arrow-right ct-history-arrow"></i>
-                                          <span className={`ct-status-badge ${getStatusClass(h.to)}`}>{h.to}</span>
-                                          <span className="ct-history-date">{formatDate(h.changed_at)}</span>
-                                        </div>
-                                        <div className="ct-history-meta">
-                                          <span className="ct-history-author"><i className="fa-solid fa-user"></i> {h.author}</span>
-                                        </div>
-                                        {h.comment && <p className="ct-history-comment">{h.comment}</p>}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
+                  <tr
+                    key={s.id}
+                    className={`ct-row${editCustomer?.id === s.id ? ' row-editing' : ''}`}
+                    onClick={() => openPanel(s, 'details')}
+                  >
+                    <td className="td-num">{(currentPage - 1) * ROWS_PER_PAGE + idx + 1}</td>
+                    <td className="td-name">{lead.name || 'Χωρίς όνομα'}</td>
+                    <td>
+                      {(() => {
+                        const st = lead.service_type || plan.service_type
+                        if (!st) return '—'
+                        return (
+                          <span className={`ct-service-badge ct-service-${st}`}>
+                            <i className={`fa-solid ${SERVICE_TYPE_ICONS[st] || 'fa-bolt'}`}></i>
+                            {SERVICE_TYPE_LABELS[st] || st}
+                          </span>
+                        )
+                      })()}
+                    </td>
+                    <td>
+                      {lead.phone ? (
+                        <a href={`tel:${lead.phone}`} className="ct-phone" onClick={e => e.stopPropagation()}>
+                          <i className="fa-solid fa-phone"></i> {lead.phone}
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td>
+                      {lead.email ? (
+                        <a href={`mailto:${lead.email}`} className="ct-email" onClick={e => e.stopPropagation()}>
+                          {lead.email}
+                        </a>
+                      ) : '—'}
+                    </td>
+                    <td>{REGION_LABELS[lead.region] || lead.region || '—'}</td>
+                    <td>
+                      {plan.provider
+                        ? <span className="ct-plan-badge">{plan.provider} – {plan.plan}</span>
+                        : '—'}
+                    </td>
+                    <td>
+                      <span className={`ct-status-badge ${getStatusClass(status)}`}>
+                        {s.locked && (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px', verticalAlign: 'middle' }}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                        )}
+                        {status}
+                      </span>
+                    </td>
+                    <td className="td-date" title={formatDate(s.submitted_at)}>{timeAgo(s.submitted_at)}</td>
+                    <td className="td-notes">
+                      <button
+                        className="ct-notes-btn"
+                        onClick={e => { e.stopPropagation(); openPanel(s, 'details') }}
+                      >
+                        {/* <i className={`fa-${noteCount > 0 ? 'solid' : 'regular'} fa-comment`}></i> */}
+                        {/* {noteCount > 0 && <span className="ct-notes-count">{noteCount}</span>} */}
+                      </button>
+                    </td>
+                    <td className="td-expand">
+                      <i className="fa-solid fa-arrow-right ct-expand-icon"></i>
+                    </td>
+                  </tr>
                 )
               })}
             </tbody>
@@ -672,7 +517,7 @@ export default function CustomersTab({ user, refreshKey }) {
         </div>
       )}
 
-      {/* Pagination controls */}
+      {/* Pagination */}
       {!loading && filtered.length > ROWS_PER_PAGE && (
         <div className="ct-pagination">
           <button
@@ -705,110 +550,262 @@ export default function CustomersTab({ user, refreshKey }) {
         </div>
       )}
 
-      {/* Status change modal */}
-      {statusChange && (
-        <>
-          <div className="notes-overlay" onClick={() => setStatusChange(null)} />
-          <div className="ct-status-modal">
-            <div className="ct-status-modal-header">
-              <h3>Αλλαγή Status</h3>
-              <button className="notes-close" onClick={() => setStatusChange(null)}>
-                <i className="fa-solid fa-xmark"></i>
+      {/* Customer Detail Panel */}
+      <EditPanel
+        isOpen={!!editCustomer}
+        onClose={() => { setEditCustomer(null); setPendingStatus(null) }}
+        title={panelLead.name || 'Πελάτης'}
+        width="620px"
+      >
+        {editCustomer && (
+          <>
+            {/* Tab nav */}
+            <div className="ep-tabs">
+              <button
+                className={`ep-tab${activeTab === 'details' ? ' active' : ''}`}
+                onClick={() => setActiveTab('details')}
+              >
+                <i className="fa-solid fa-user"></i> Στοιχεία
               </button>
-            </div>
-            <div className="ct-status-modal-body">
-              <div className="ct-status-modal-change">
-                <span className={`ct-status-badge ${getStatusClass(statusChange.oldStatus)}`}>{statusChange.oldStatus}</span>
-                <i className="fa-solid fa-arrow-right"></i>
-                <span className={`ct-status-badge ${getStatusClass(statusChange.newStatus)}`}>{statusChange.newStatus}</span>
-              </div>
-              <textarea
-                className="ct-status-comment"
-                placeholder="Σχόλιο (προαιρετικό)..."
-                value={statusComment}
-                onChange={e => setStatusComment(e.target.value)}
-                rows={3}
-                autoFocus
-              />
-            </div>
-            <div className="ct-status-modal-footer">
-              <button className="btn-cancel" onClick={() => setStatusChange(null)}>Ακύρωση</button>
-              <button className="btn-primary" onClick={confirmStatusChange} disabled={statusSaving}>
-                {statusSaving ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Αποθήκευση'}
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Notes sidebar */}
-      {notesId && (
-        <>
-          <div className="notes-overlay" onClick={() => setNotesId(null)} />
-          <aside className="notes-sidebar">
-            <div className="notes-header">
-              <h3>
-                <i className="fa-solid fa-comment"></i>
-                Σχόλια – {notesSub?.lead_info?.name || 'Πελάτης'}
-              </h3>
-              <button className="notes-close" onClick={() => setNotesId(null)}>
-                <i className="fa-solid fa-xmark"></i>
+              <button
+                className={`ep-tab${activeTab === 'history' ? ' active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                <i className="fa-solid fa-clock-rotate-left"></i> Ιστορικό
+                {/* {statusHistory.length > 0 && <span className="ct-notes-count" style={{ marginLeft: '4px' }}>{statusHistory.length}</span>} */}
               </button>
             </div>
 
-            <div className="notes-list">
-              {notes.length === 0 ? (
-                <div className="notes-empty">
-                  <i className="fa-regular fa-comment-dots"></i>
-                  <p>Δεν υπάρχουν σχόλια ακόμα</p>
+            {/* ── Details tab ── */}
+            {activeTab === 'details' && (
+              <>
+                <div className="ep-detail-section">
+                  <h4><i className="fa-solid fa-user"></i> Στοιχεία Επικοινωνίας</h4>
+                  <dl>
+                    <dt>Όνομα</dt><dd>{panelLead.name || '—'}</dd>
+                    <dt>Τηλέφωνο</dt><dd><a href={`tel:${panelLead.phone}`}>{panelLead.phone || '—'}</a></dd>
+                    <dt>Email</dt><dd>{panelLead.email || '—'}</dd>
+                    <dt>Περιοχή</dt><dd>{REGION_LABELS[panelLead.region] || panelLead.region || '—'}</dd>
+                    <dt>Ώρα επικοινωνίας</dt><dd>{CONTACT_TIME_LABELS[panelLead.contact_time] || panelLead.contact_time || '—'}</dd>
+                  </dl>
                 </div>
-              ) : (
-                notes.map((n, i) => (
-                  <div key={i} className="note-item">
-                    <div className="note-meta">
-                      <span className="note-author"><i className="fa-solid fa-user"></i> {n.author || 'Άγνωστος'}</span>
-                      <span className="note-date">{formatDate(n.created_at)}</span>
-                    </div>
-                    <p className="note-text">{n.text}</p>
-                    <div className="note-footer">
-                      <button className="note-delete" onClick={() => deleteNote(notesId, i)}>
-                        <i className="fa-solid fa-trash"></i>
-                      </button>
+
+                <div className="ep-detail-section">
+                  <h4><i className="fa-solid fa-bolt"></i> Πληροφορίες Ρεύματος</h4>
+                  <dl>
+                    <dt>Τύπος πελάτη</dt><dd>{CUSTOMER_TYPE_LABELS[panelElec.customer_type] || panelElec.customer_type || '—'}</dd>
+                    <dt>Νυχτερινό</dt><dd>{panelElec.night_tariff === 'yes' ? 'Ναι' : panelElec.night_tariff === 'no' ? 'Όχι' : '—'}</dd>
+                    <dt>Κοινωνικό</dt><dd>{panelElec.social_tariff === 'yes' ? 'Ναι' : panelElec.social_tariff === 'no' ? 'Όχι' : '—'}</dd>
+                    <dt>Τωρινός πάροχος</dt><dd>{panelElec.current_provider || '—'}</dd>
+                    <dt>Κατανάλωση</dt><dd>{panelElec.kwh_consumption ? `${panelElec.kwh_consumption} kWh` : '—'}</dd>
+                    {panelElec.night_kwh_consumption > 0 && (
+                      <><dt>Νυχτερινή κατανάλωση</dt><dd>{panelElec.night_kwh_consumption} kWh</dd></>
+                    )}
+                  </dl>
+                </div>
+
+                {panelPlan.provider && (
+                  <div className="ep-detail-section">
+                    <h4><i className="fa-solid fa-file-invoice"></i> Επιλεγμένο Πλάνο</h4>
+                    <dl>
+                      <dt>Πάροχος</dt><dd>{panelPlan.provider}</dd>
+                      <dt>Πλάνο</dt><dd>{panelPlan.plan}</dd>
+                      <dt>Τύπος τιμολογίου</dt><dd>{panelPlan.tariff_type || '—'}</dd>
+                      <dt>Τιμή/kWh</dt><dd>{panelPlan.price_per_kwh != null ? `${panelPlan.price_per_kwh} €` : '—'}</dd>
+                      {panelPlan.night_price_per_kwh != null && (
+                        <><dt>Νυχτ. τιμή/kWh</dt><dd>{panelPlan.night_price_per_kwh} €</dd></>
+                      )}
+                      <dt>Πάγιο</dt><dd>{panelPlan.monthly_fee_eur != null ? `${panelPlan.monthly_fee_eur} €` : '—'}</dd>
+                    </dl>
+                  </div>
+                )}
+
+                {(panelDetail.afm || panelDetail.doy) && (
+                  <div className="ep-detail-section">
+                    <h4><i className="fa-solid fa-id-card"></i> Λοιπά Στοιχεία</h4>
+                    <dl>
+                      <dt>ΑΦΜ</dt><dd>{panelDetail.afm || '—'}</dd>
+                      <dt>ΔΟΥ</dt><dd>{panelDetail.doy || '—'}</dd>
+                      <dt>Πάγια εντολή</dt><dd>{panelDetail.pagia_entoli ? 'Ναι' : 'Όχι'}</dd>
+                      {panelDetail.iban && <><dt>IBAN</dt><dd>{panelDetail.iban}</dd></>}
+                      {panelDetail.onoma_dikaiouhou && <><dt>Δικαιούχος</dt><dd>{panelDetail.onoma_dikaiouhou}</dd></>}
+                      {panelDetail.onoma_trapezas && <><dt>Τράπεζα</dt><dd>{panelDetail.onoma_trapezas}</dd></>}
+                      <dt>Αλλαγή ονόματος</dt><dd>{panelDetail.allagi_onomatos ? 'Ναι' : 'Όχι'}</dd>
+                      <dt>Ιδιοκτησία</dt><dd>{panelDetail.idiotita || '—'}</dd>
+                    </dl>
+                  </div>
+                )}
+
+                {hasFiles && (
+                  <div className="ep-detail-section">
+                    <h4><i className="fa-solid fa-images"></i> Αρχεία / Φωτογραφίες</h4>
+                    <div className="ep-files-grid">
+                      {Object.entries(FILE_LABELS).map(([key, label]) => {
+                        const urls = panelFiles[key]
+                        if (!urls || (Array.isArray(urls) && urls.length === 0)) return null
+                        const list = Array.isArray(urls) ? urls : [urls]
+                        return (
+                          <div key={key} className="ep-file-group">
+                            <span className="ep-file-label">{label}</span>
+                            <div className="ep-file-previews">
+                              {list.map((item, i) => (
+                                <FileThumb
+                                  key={i}
+                                  pathOrUrl={item}
+                                  label={label}
+                                  index={i}
+                                  onLightbox={setLightbox}
+                                  resolveFileUrl={resolveFileUrl}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
-                ))
-              )}
-              <div ref={notesEndRef} />
-            </div>
+                )}
 
-            <div className="notes-input-wrap">
-              <textarea
-                className="notes-input"
-                placeholder="Γράψε σχόλιο..."
-                value={noteText}
-                onChange={e => setNoteText(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    addNote(notesId)
-                  }
-                }}
-                rows={3}
-              />
-              <button
-                className="notes-send"
-                onClick={() => addNote(notesId)}
-                disabled={!noteText.trim() || notesSaving}
-              >
-                {notesSaving
-                  ? <i className="fa-solid fa-spinner fa-spin"></i>
-                  : <i className="fa-solid fa-paper-plane"></i>
-                }
-              </button>
-            </div>
-          </aside>
-        </>
-      )}
+                <div className="ep-detail-section">
+                  <h4><i className="fa-regular fa-clock"></i> Υποβλήθηκε</h4>
+                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{formatDate(editCustomer.submitted_at)}</p>
+                </div>
+
+                {/* Status */}
+                <div className="ep-divider" />
+                <div className="ep-field">
+                  <label className="ep-label">Status</label>
+                  <select
+                    className={`ep-input ep-select ${getStatusClass(pendingStatus || currentStatus)}`}
+                    value={pendingStatus || currentStatus}
+                    onChange={e => {
+                      const val = e.target.value
+                      setPendingStatus(val !== currentStatus ? val : null)
+                      setStatusComment('')
+                    }}
+                  >
+                    {(statusOptions || []).map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+                {pendingStatus && pendingStatus !== currentStatus && (
+                  <>
+                    <div className="ep-field">
+                      <label className="ep-label">Σχόλιο (προαιρετικό)</label>
+                      <textarea
+                        className="ep-input ep-textarea"
+                        placeholder="Σχόλιο..."
+                        value={statusComment}
+                        onChange={e => setStatusComment(e.target.value)}
+                        rows={2}
+                        autoFocus
+                      />
+                    </div>
+                    <button
+                      className="btn-primary"
+                      onClick={confirmStatusChange}
+                      disabled={statusSaving}
+                      style={{ width: '100%', marginBottom: '1.25rem' }}
+                    >
+                      {statusSaving ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Αποθήκευση Status'}
+                    </button>
+                  </>
+                )}
+
+                {/* Notes */}
+                <div className="ep-divider" />
+                <div className="ep-section-title">
+                  <i className="fa-solid fa-comment" style={{ marginRight: '0.4rem' }}></i>
+                  Σχόλια
+                </div>
+                {notes.length === 0 ? (
+                  <div className="ep-notes-empty">Δεν υπάρχουν σχόλια ακόμα</div>
+                ) : (
+                  <div className="ep-notes-list">
+                    {notes.map((n, i) => (
+                      <div key={i} className="ep-note-item">
+                        <div className="ep-note-meta">
+                          <span className="ep-note-author">
+                            <i className="fa-solid fa-user" style={{ marginRight: '0.3rem' }}></i>
+                            {n.author || 'Άγνωστος'}
+                          </span>
+                          <span className="ep-note-date">{formatDate(n.created_at)}</span>
+                        </div>
+                        <p className="ep-note-text">{n.text}</p>
+                        <div className="ep-note-footer">
+                          <button className="ep-note-delete" onClick={() => deleteNote(i)}>
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={notesEndRef} />
+                  </div>
+                )}
+                <div className="ep-notes-input-row" style={{ marginTop: '0.75rem' }}>
+                  <textarea
+                    className="ep-input ep-textarea"
+                    placeholder="Γράψε σχόλιο..."
+                    value={noteText}
+                    onChange={e => setNoteText(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        addNote()
+                      }
+                    }}
+                    rows={3}
+                  />
+                  <button
+                    className="ep-notes-send"
+                    onClick={addNote}
+                    disabled={!noteText.trim() || notesSaving}
+                  >
+                    {notesSaving
+                      ? <i className="fa-solid fa-spinner fa-spin"></i>
+                      : <i className="fa-solid fa-paper-plane"></i>
+                    }
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ── History tab ── */}
+            {activeTab === 'history' && (
+              <>
+                {statusHistory.length === 0 ? (
+                  <div className="ep-notes-empty">
+                    <i className="fa-solid fa-clock-rotate-left" style={{ fontSize: '1.5rem', marginBottom: '0.5rem', display: 'block' }}></i>
+                    Δεν υπάρχει ιστορικό ακόμα
+                  </div>
+                ) : (
+                  <div className="ep-history-timeline">
+                    {statusHistory.map((h, i) => (
+                      <div key={i} className="ep-history-entry">
+                        <div className="ep-history-dot" />
+                        <div className="ep-history-content">
+                          <div className="ep-history-header">
+                            <span className={`ct-status-badge ${getStatusClass(h.from)}`}>{h.from}</span>
+                            <i className="fa-solid fa-arrow-right" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}></i>
+                            <span className={`ct-status-badge ${getStatusClass(h.to)}`}>{h.to}</span>
+                            <span className="ep-history-date">{formatDate(h.changed_at)}</span>
+                          </div>
+                          <div className="ep-history-meta">
+                            <i className="fa-solid fa-user" style={{ marginRight: '0.3rem' }}></i>
+                            {h.author}
+                          </div>
+                          {h.comment && <p className="ep-history-comment">{h.comment}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </EditPanel>
     </div>
   )
 }

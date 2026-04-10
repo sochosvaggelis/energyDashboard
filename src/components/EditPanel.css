@@ -1,0 +1,489 @@
+/* ── Panel shell ── */
+.edit-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: var(--panel-width, 480px);
+  height: 100vh;
+  background: #1a2744;
+  border-left: 1px solid var(--border-default);
+  z-index: 9001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: -6px 0 40px var(--shadow-color);
+
+  /* Hidden — clip from left edge inward */
+  visibility: hidden;
+  clip-path: inset(0 0 0 100%);
+  transition: clip-path 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.35s;
+}
+
+.edit-panel.open {
+  visibility: visible;
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear;
+}
+
+/* ── Header ── */
+.edit-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.125rem 1.5rem;
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.edit-panel-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(var(--panel-width, 480px) - 5rem);
+}
+
+.edit-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  transition: background 0.2s, color 0.2s;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.edit-panel-close:hover {
+  background: var(--overlay-light);
+  color: var(--text-primary);
+}
+
+/* ── Scrollable body ── */
+.edit-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+/* ── Sticky footer ── */
+.edit-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-default);
+  flex-shrink: 0;
+  background: #1a2744;
+}
+
+/* ── Highlighted row being edited ── */
+.row-editing {
+  background: rgba(245, 158, 11, 0.07) !important;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ══ Form helpers (prefixed ep-) ══ */
+
+.ep-field {
+  margin-bottom: 1.25rem;
+}
+
+.ep-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.4rem;
+}
+
+.ep-input {
+  display: block;
+  width: 100%;
+  background: var(--deep-blue);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.ep-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ep-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.ep-select option {
+  background: var(--deep-blue);
+  color: var(--text-primary);
+}
+
+.ep-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.ep-checkbox-row input[type='checkbox'] {
+  width: auto;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ── Logo preview ── */
+.ep-logo-preview-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  margin-top: 0.5rem;
+}
+
+.ep-logo-preview {
+  height: 40px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
+}
+
+.ep-logo-preview-label {
+  font-size: 0.78rem;
+  color: #666;
+}
+
+/* ── Divider ── */
+.ep-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 1.25rem 0;
+}
+
+/* ── Section title ── */
+.ep-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 1rem;
+}
+
+/* ── Mode toggle button (PlansByCategoryTab) ── */
+.ep-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  background: var(--overlay-light);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 0.4rem;
+}
+
+.ep-mode-toggle.active {
+  background: var(--accent);
+  color: var(--midnight);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.ep-fx-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  background: rgba(var(--accent-rgb, 99, 210, 145), 0.15);
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+/* ── Two-column grid for compact fields ── */
+.ep-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1rem;
+}
+
+/* ── Customer panel tabs ── */
+.ep-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-default);
+  margin-bottom: 1.25rem;
+  margin-top: -0.25rem;
+}
+
+.ep-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.83rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  margin-bottom: -1px;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.ep-tab:hover {
+  color: var(--text-primary);
+}
+
+.ep-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Customer detail sections ── */
+.ep-detail-section {
+  margin-bottom: 1.5rem;
+}
+
+.ep-detail-section h4 {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ep-detail-section dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 1rem;
+}
+
+.ep-detail-section dt {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ep-detail-section dd {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+/* ── Status change section ── */
+.ep-status-transition {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--overlay-light);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.ep-status-arrow {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* ── Notes list inside panel ── */
+.ep-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.ep-note-item {
+  background: var(--overlay-light);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.ep-note-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.ep-note-author {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.ep-note-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.ep-note-text {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ep-note-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.4rem;
+}
+
+.ep-note-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.ep-note-delete:hover {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ep-notes-input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.ep-notes-input-row .ep-input {
+  flex: 1;
+  resize: none;
+  min-height: 60px;
+}
+
+.ep-notes-send {
+  background: var(--accent);
+  color: var(--midnight);
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+
+.ep-notes-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ep-notes-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 1.5rem 0;
+  font-size: 0.875rem;
+}
+
+/* ── Status history inside panel ── */
+.ep-history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ep-history-entry {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.ep-history-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-medium);
+  flex-shrink: 0;
+  margin-top: 0.4rem;
+}
+
+.ep-history-content {
+  flex: 1;
+}
+
+.ep-history-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.ep-history-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.ep-history-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ep-history-comment {
+  margin-top: 0.25rem;
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* ── Files section ── */
+.ep-files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.ep-file-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.ep-file-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.ep-file-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}

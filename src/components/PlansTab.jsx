@@ -123,13 +123,23 @@ export default function PlansTab({ serviceType, refreshKey }) {
 
   async function fetchPlanHistory(planId) {
     setHistoryLoading(true)
-    const { data } = await supabase
+    const { data: logs } = await supabase
       .from('audit_log')
       .select('*')
       .eq('entity', 'plan')
       .eq('entity_id', planId)
       .order('created_at', { ascending: false })
-    setPlanHistory(data || [])
+    if (logs?.length) {
+      const userIds = [...new Set(logs.map(l => l.user_id).filter(Boolean))]
+      const { data: staffData } = await supabase
+        .from('staff')
+        .select('user_id, display_name')
+        .in('user_id', userIds)
+      const nameMap = Object.fromEntries((staffData || []).map(s => [s.user_id, s.display_name]))
+      setPlanHistory(logs.map(l => ({ ...l, author: nameMap[l.user_id] || l.user_email || '—' })))
+    } else {
+      setPlanHistory([])
+    }
     setHistoryLoading(false)
   }
 
@@ -460,7 +470,7 @@ export default function PlansTab({ serviceType, refreshKey }) {
                           </div>
                           <div className="ep-history-meta">
                             <i className="fa-solid fa-user" style={{ marginRight: '0.3rem' }}></i>
-                            {entry.user_email || '—'}
+                            {entry.author}
                           </div>
                           {entry.details?.action === 'create' && (
                             <p className="ep-history-comment">{entry.details.plan_name} · {entry.details.provider}</p>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { cacheGet, cacheSet, cacheInvalidate } from '../lib/cache'
+import { logAction } from '../lib/audit'
 import EditPanel from './EditPanel'
 import './PlansTab.css'
 
@@ -14,12 +15,44 @@ const TARIFF_TYPES = [
   'Δυναμικό Τιμολόγιο'
 ]
 
+const FIELD_LABELS = {
+  plan_name: 'Όνομα',
+  tariff_type: 'Τύπος τιμολογίου',
+  duration: 'Διάρκεια (μήνες)',
+  info_text: 'Κείμενο',
+  provider_id: 'Πάροχος',
+}
+
 const emptyForm = {
   provider_id: '',
   plan_name: '',
   tariff_type: TARIFF_TYPES[0],
   duration: '',
   info_text: ''
+}
+
+function formatDate(ts) {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleString('el-GR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+function computeDiff(original, updated, providers) {
+  const changes = {}
+  const fields = ['plan_name', 'tariff_type', 'duration', 'info_text', 'provider_id']
+  for (const field of fields) {
+    const oldVal = original[field] ?? ''
+    const newVal = updated[field] ?? ''
+    if (String(oldVal) !== String(newVal)) {
+      if (field === 'provider_id') {
+        const oldName = providers.find(p => p.id === oldVal)?.name ?? oldVal
+        const newName = providers.find(p => p.id === newVal)?.name ?? newVal
+        changes[field] = { old: oldName, new: newName }
+      } else {
+        changes[field] = { old: oldVal || '—', new: newVal || '—' }
+      }
+    }
+  }
+  return changes
 }
 
 export default function PlansTab({ serviceType, refreshKey }) {
@@ -35,6 +68,9 @@ export default function PlansTab({ serviceType, refreshKey }) {
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState('')
   const [error, setError] = useState(null)
+  const [activeTab, setActiveTab] = useState('details')
+  const [planHistory, setPlanHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   const filtered = plans.filter(p =>
     p.plan_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -85,6 +121,18 @@ export default function PlansTab({ serviceType, refreshKey }) {
     setLoading(false)
   }
 
+  async function fetchPlanHistory(planId) {
+    setHistoryLoading(true)
+    const { data } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('entity', 'plan')
+      .eq('entity_id', planId)
+      .order('created_at', { ascending: false })
+    setPlanHistory(data || [])
+    setHistoryLoading(false)
+  }
+
   async function handleAdd(e) {
     e.preventDefault()
     setError(null)
@@ -104,8 +152,14 @@ export default function PlansTab({ serviceType, refreshKey }) {
       duration: form.duration || null,
       info_text: form.info_text || null
     }
-    const { error } = await supabase.from('plans').insert(insertData)
+    const { data: newPlan, error } = await supabase.from('plans').insert(insertData).select().single()
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
+    const providerName = providers.find(p => p.id === form.provider_id)?.name ?? form.provider_id
+    logAction('create_plan', {
+      entity: 'plan',
+      entityId: newPlan.id,
+      details: { action: 'create', plan_name: form.plan_name, provider: providerName, tariff_type: form.tariff_type }
+    })
     setForm(emptyForm)
     setShowModal(false)
     cacheInvalidate(plansCacheKey)
@@ -121,7 +175,9 @@ export default function PlansTab({ serviceType, refreshKey }) {
       duration: plan.duration ?? '',
       info_text: plan.info_text ?? ''
     })
+    setActiveTab('details')
     setError(null)
+    fetchPlanHistory(plan.id)
   }
 
   async function saveEdit() {
@@ -147,6 +203,10 @@ export default function PlansTab({ serviceType, refreshKey }) {
       })
       .eq('id', editPlan.id)
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
+    const changes = computeDiff(editPlan, editData, providers)
+    if (Object.keys(changes).length > 0) {
+      logAction('update_plan', { entity: 'plan', entityId: editPlan.id, details: { action: 'update', changes } })
+    }
     setEditPlan(null)
     cacheInvalidate(plansCacheKey)
     fetchPlans(true)
@@ -287,76 +347,143 @@ export default function PlansTab({ serviceType, refreshKey }) {
       {/* Edit Plan Panel */}
       <EditPanel
         isOpen={!!editPlan}
-        onClose={() => { setEditPlan(null); setError(null) }}
+        onClose={() => { setEditPlan(null); setError(null); setActiveTab('details') }}
         title={`Επεξεργασία: ${editPlan?.plan_name || ''}`}
-        footer={
+        footer={activeTab === 'details' ? (
           <>
-            <button className="btn-cancel" onClick={() => { setEditPlan(null); setError(null) }}>Ακύρωση</button>
+            <button className="btn-cancel" onClick={() => { setEditPlan(null); setError(null); setActiveTab('details') }}>Ακύρωση</button>
             <button className="btn-primary" onClick={saveEdit}>Αποθήκευση</button>
           </>
-        }
+        ) : null}
       >
         {editPlan && (
           <>
-            <div className="ep-field">
-              <label className="ep-label">Provider</label>
-              <select
-                className="ep-input ep-select"
-                value={editData.provider_id}
-                onChange={e => setEditData({ ...editData, provider_id: e.target.value })}
+            <div className="ep-tabs">
+              <button
+                className={`ep-tab${activeTab === 'details' ? ' active' : ''}`}
+                onClick={() => setActiveTab('details')}
               >
-                {providers.map(prov => (
-                  <option key={prov.id} value={prov.id}>{prov.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="ep-field">
-              <label className="ep-label">Plan Name</label>
-              <input
-                className="ep-input"
-                value={editData.plan_name}
-                onChange={e => setEditData({ ...editData, plan_name: e.target.value })}
-              />
-            </div>
-
-            <div className="ep-field">
-              <label className="ep-label">Tariff Type</label>
-              <select
-                className="ep-input ep-select"
-                value={editData.tariff_type}
-                onChange={e => setEditData({ ...editData, tariff_type: e.target.value })}
+                Στοιχεία
+              </button>
+              <button
+                className={`ep-tab${activeTab === 'history' ? ' active' : ''}`}
+                onClick={() => setActiveTab('history')}
               >
-                {TARIFF_TYPES.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
+                <i className="fa-solid fa-clock-rotate-left"></i> Ιστορικό
+              </button>
             </div>
 
-            <div className="ep-field">
-              <label className="ep-label">Διάρκεια (μήνες)</label>
-              <input
-                className="ep-input"
-                type="number"
-                min="1"
-                value={editData.duration}
-                onChange={e => setEditData({ ...editData, duration: e.target.value })}
-                placeholder="π.χ. 12"
-              />
-            </div>
+            {activeTab === 'details' && (
+              <>
+                <div className="ep-field">
+                  <label className="ep-label">Provider</label>
+                  <select
+                    className="ep-input ep-select"
+                    value={editData.provider_id}
+                    onChange={e => setEditData({ ...editData, provider_id: e.target.value })}
+                  >
+                    {providers.map(prov => (
+                      <option key={prov.id} value={prov.id}>{prov.name}</option>
+                    ))}
+                  </select>
+                </div>
 
-            <div className="ep-field">
-              <label className="ep-label">Κείμενο Πακέτου</label>
-              <textarea
-                className="ep-input ep-textarea"
-                value={editData.info_text}
-                onChange={e => setEditData({ ...editData, info_text: e.target.value })}
-                rows={3}
-                placeholder="Κείμενο που εμφανίζεται στο frontend..."
-              />
-            </div>
+                <div className="ep-field">
+                  <label className="ep-label">Plan Name</label>
+                  <input
+                    className="ep-input"
+                    value={editData.plan_name}
+                    onChange={e => setEditData({ ...editData, plan_name: e.target.value })}
+                  />
+                </div>
 
-            {error && <div className="error-msg">{error}</div>}
+                <div className="ep-field">
+                  <label className="ep-label">Tariff Type</label>
+                  <select
+                    className="ep-input ep-select"
+                    value={editData.tariff_type}
+                    onChange={e => setEditData({ ...editData, tariff_type: e.target.value })}
+                  >
+                    {TARIFF_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="ep-field">
+                  <label className="ep-label">Διάρκεια (μήνες)</label>
+                  <input
+                    className="ep-input"
+                    type="number"
+                    min="1"
+                    value={editData.duration}
+                    onChange={e => setEditData({ ...editData, duration: e.target.value })}
+                    placeholder="π.χ. 12"
+                  />
+                </div>
+
+                <div className="ep-field">
+                  <label className="ep-label">Κείμενο Πακέτου</label>
+                  <textarea
+                    className="ep-input ep-textarea"
+                    value={editData.info_text}
+                    onChange={e => setEditData({ ...editData, info_text: e.target.value })}
+                    rows={3}
+                    placeholder="Κείμενο που εμφανίζεται στο frontend..."
+                  />
+                </div>
+
+                {error && <div className="error-msg">{error}</div>}
+              </>
+            )}
+
+            {activeTab === 'history' && (
+              <>
+                {historyLoading ? (
+                  <div className="ep-notes-empty">Φόρτωση...</div>
+                ) : planHistory.length === 0 ? (
+                  <div className="ep-notes-empty">
+                    <i className="fa-solid fa-clock-rotate-left" style={{ fontSize: '1.5rem', marginBottom: '0.5rem', display: 'block' }}></i>
+                    Δεν υπάρχει ιστορικό ακόμα
+                  </div>
+                ) : (
+                  <div className="ep-history-timeline">
+                    {planHistory.map(entry => (
+                      <div key={entry.id} className="ep-history-entry">
+                        <div className="ep-history-dot" />
+                        <div className="ep-history-content">
+                          <div className="ep-history-header">
+                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                              {entry.details?.action === 'create' ? 'Δημιουργήθηκε' : 'Επεξεργάστηκε'}
+                            </span>
+                            <span className="ep-history-date">{formatDate(entry.created_at)}</span>
+                          </div>
+                          <div className="ep-history-meta">
+                            <i className="fa-solid fa-user" style={{ marginRight: '0.3rem' }}></i>
+                            {entry.user_email || '—'}
+                          </div>
+                          {entry.details?.action === 'create' && (
+                            <p className="ep-history-comment">{entry.details.plan_name} · {entry.details.provider}</p>
+                          )}
+                          {entry.details?.action === 'update' && entry.details.changes && (
+                            <div style={{ marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              {Object.entries(entry.details.changes).map(([field, { old: o, new: n }]) => (
+                                <div key={field} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                  <span style={{ color: 'var(--text-muted)' }}>{FIELD_LABELS[field] ?? field}:</span>{' '}
+                                  <span style={{ color: '#fca5a5' }}>{String(o)}</span>
+                                  <i className="fa-solid fa-arrow-right" style={{ margin: '0 0.3rem', fontSize: '0.65rem', color: 'var(--text-muted)' }}></i>
+                                  <span style={{ color: 'var(--accent)' }}>{String(n)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </>
         )}
       </EditPanel>

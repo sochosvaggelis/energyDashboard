@@ -3,8 +3,73 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../lib/supabase'
 import { cacheGet, cacheSet, cacheInvalidate } from '../lib/cache'
 import { computeAutoPrice } from '../lib/formula'
+import { logAction } from '../lib/audit'
 import EditPanel from './EditPanel'
 import './PlansByCategoryTab.css'
+
+const FIELD_LABELS = {
+  price_per_kwh: 'Τιμή/kWh',
+  night_price_per_kwh: 'Νυχτερινή τιμή/kWh',
+  monthly_fee_eur: 'Μηνιαίο πάγιο (€)',
+  duration: 'Διάρκεια (μήνες)',
+  social_tariff: 'Κοινωνικό τιμολόγιο',
+  info_text: 'Κείμενο',
+  tea: 'ΤΕΑ',
+  ll: 'Ll',
+  lu: 'Lu',
+  tv: 'Τβ',
+  alpha: 'α',
+  price_mode: 'Τρόπος τιμολόγησης (ημέρα)',
+  night_price_mode: 'Τρόπος τιμολόγησης (νύχτα)',
+  pricing_tiers: 'Κλιμάκια',
+}
+
+function formatDate(ts) {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleString('el-GR', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+function computePricingDiff(original, editData) {
+  const changes = {}
+
+  for (const field of ['price_per_kwh', 'night_price_per_kwh', 'monthly_fee_eur', 'tea', 'll', 'lu', 'tv', 'alpha']) {
+    const oldVal = String(original[field] ?? '')
+    const newVal = String(editData[field] ?? '')
+    if (oldVal !== newVal) {
+      changes[field] = { old: oldVal || '—', new: newVal || '—' }
+    }
+  }
+
+  if (String(original.duration ?? '') !== String(editData.duration ?? '')) {
+    changes.duration = { old: original.duration ?? '—', new: editData.duration || '—' }
+  }
+
+  if (!!original.social_tariff !== !!editData.social_tariff) {
+    changes.social_tariff = { old: original.social_tariff ? 'Ναι' : 'Όχι', new: editData.social_tariff ? 'Ναι' : 'Όχι' }
+  }
+
+  const oldInfo = original.info_text ?? ''
+  const newInfo = editData.info_text ?? ''
+  if (oldInfo !== newInfo) {
+    changes.info_text = { old: oldInfo || '—', new: newInfo || '—' }
+  }
+
+  const origPriceMode = original.price_formula?.base_type === 'auto' ? 'auto' : 'static'
+  if (origPriceMode !== editData.price_mode) {
+    changes.price_mode = { old: origPriceMode === 'auto' ? 'Αυτόματο ΤΕΑ' : 'Στατική τιμή', new: editData.price_mode === 'auto' ? 'Αυτόματο ΤΕΑ' : 'Στατική τιμή' }
+  }
+
+  const origNightMode = original.night_price_formula?.base_type === 'auto' ? 'auto' : 'static'
+  if (origNightMode !== editData.night_price_mode) {
+    changes.night_price_mode = { old: origNightMode === 'auto' ? 'Αυτόματο ΤΕΑ' : 'Στατική τιμή', new: editData.night_price_mode === 'auto' ? 'Αυτόματο ΤΕΑ' : 'Στατική τιμή' }
+  }
+
+  if (JSON.stringify(original.pricing_tiers ?? []) !== JSON.stringify(serializeTiers(editData.pricing_tiers))) {
+    changes.pricing_tiers = { old: '(παλιά κλιμάκια)', new: '(νέα κλιμάκια)' }
+  }
+
+  return changes
+}
 
 function TruncateCell({ children }) {
   const [tip, setTip] = useState(null)
@@ -269,6 +334,9 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
   const [editPlan, setEditPlan] = useState(null)
   const [editData, setEditData] = useState({})
   const [showInfo, setShowInfo] = useState(false)
+  const [activeTab, setActiveTab] = useState('details')
+  const [planHistory, setPlanHistory] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
 
   useEffect(() => {
     fetchPlans(refreshKey > 0)
@@ -323,9 +391,23 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
     setLoading(false)
   }
 
+  async function fetchPlanHistory(planId) {
+    setHistoryLoading(true)
+    const { data } = await supabase
+      .from('audit_log')
+      .select('*')
+      .eq('entity', 'plan')
+      .eq('entity_id', planId)
+      .order('created_at', { ascending: false })
+    setPlanHistory(data || [])
+    setHistoryLoading(false)
+  }
+
   function openEdit(plan) {
     const isVar = plan.tariff_type === 'Κυμαινόμενο Τιμολόγιο'
     setEditPlan(plan)
+    setActiveTab('details')
+    fetchPlanHistory(plan.id)
     setEditData({
       provider_id: plan.provider_id,
       price_per_kwh: plan.price_per_kwh ?? '',
@@ -388,7 +470,12 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
     }
     const { error } = await supabase.from('plans').update(updateData).eq('id', editPlan.id)
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
+    const changes = computePricingDiff(editPlan, editData)
+    if (Object.keys(changes).length > 0) {
+      logAction('update_plan', { entity: 'plan', entityId: editPlan.id, details: { action: 'update', changes } })
+    }
     setEditPlan(null)
+    setActiveTab('details')
     cacheInvalidate(CACHE_KEY_PLANS)
     fetchPlans(true)
   }
@@ -497,18 +584,79 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
       {/* Edit Plan Panel */}
       <EditPanel
         isOpen={!!editPlan}
-        onClose={() => { setEditPlan(null); setError(null) }}
+        onClose={() => { setEditPlan(null); setError(null); setActiveTab('details') }}
         title={editPlan ? `${editPlan.plan_name}` : ''}
         width="560px"
-        footer={
+        footer={activeTab === 'details' ? (
           <>
-            <button className="btn-cancel" onClick={() => { setEditPlan(null); setError(null) }}>Ακύρωση</button>
+            <button className="btn-cancel" onClick={() => { setEditPlan(null); setError(null); setActiveTab('details') }}>Ακύρωση</button>
             <button className="btn-primary" onClick={saveEdit}>Αποθήκευση</button>
           </>
-        }
+        ) : null}
       >
         {editPlan && (
           <>
+            <div className="ep-tabs">
+              <button
+                className={`ep-tab${activeTab === 'details' ? ' active' : ''}`}
+                onClick={() => setActiveTab('details')}
+              >
+                Στοιχεία
+              </button>
+              <button
+                className={`ep-tab${activeTab === 'history' ? ' active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                <i className="fa-solid fa-clock-rotate-left"></i> Ιστορικό
+              </button>
+            </div>
+
+            {activeTab === 'history' && (
+              <>
+                {historyLoading ? (
+                  <div className="ep-notes-empty">Φόρτωση...</div>
+                ) : planHistory.length === 0 ? (
+                  <div className="ep-notes-empty">
+                    <i className="fa-solid fa-clock-rotate-left" style={{ fontSize: '1.5rem', marginBottom: '0.5rem', display: 'block' }}></i>
+                    Δεν υπάρχει ιστορικό ακόμα
+                  </div>
+                ) : (
+                  <div className="ep-history-timeline">
+                    {planHistory.map(entry => (
+                      <div key={entry.id} className="ep-history-entry">
+                        <div className="ep-history-dot" />
+                        <div className="ep-history-content">
+                          <div className="ep-history-header">
+                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                              {entry.details?.action === 'create' ? 'Δημιουργήθηκε' : 'Επεξεργάστηκε'}
+                            </span>
+                            <span className="ep-history-date">{formatDate(entry.created_at)}</span>
+                          </div>
+                          <div className="ep-history-meta">
+                            <i className="fa-solid fa-user" style={{ marginRight: '0.3rem' }}></i>
+                            {entry.user_email || '—'}
+                          </div>
+                          {entry.details?.action === 'update' && entry.details.changes && (
+                            <div style={{ marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              {Object.entries(entry.details.changes).map(([field, { old: o, new: n }]) => (
+                                <div key={field} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                  <span style={{ color: 'var(--text-muted)' }}>{FIELD_LABELS[field] ?? field}:</span>{' '}
+                                  <span style={{ color: '#fca5a5' }}>{String(o)}</span>
+                                  <i className="fa-solid fa-arrow-right" style={{ margin: '0 0.3rem', fontSize: '0.65rem', color: 'var(--text-muted)' }}></i>
+                                  <span style={{ color: 'var(--accent)' }}>{String(n)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'details' && <>
             <div className="ep-section-title">{editPlan.providers?.name ?? ''} — {editPlan.tariff_type}</div>
 
             {/* Price / kWh */}
@@ -688,6 +836,7 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
             </div>
 
             {error && <div className="error-msg">{error}</div>}
+            </>}
           </>
         )}
       </EditPanel>

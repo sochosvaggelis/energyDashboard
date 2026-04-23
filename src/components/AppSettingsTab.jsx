@@ -6,7 +6,7 @@ import './AppSettingsTab.css'
 const ALL_TABS = ['Providers', 'Plans', 'Ανά Κατηγορία', 'Πελάτες', 'Settings', 'App Settings']
 const ROLE_OPTIONS = ['admin', 'employee']
 
-export default function AppSettingsTab({ user, staffInfo, refreshKey }) {
+export default function AppSettingsTab({ user, staffInfo, refreshKey, demoMode = false, demoSessionId = null }) {
   const [staff, setStaff] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -79,15 +79,35 @@ export default function AppSettingsTab({ user, staffInfo, refreshKey }) {
     setError(null)
     setSuccess(null)
 
-    // NOTE: Ideally use Supabase Admin API via Edge Function with service_role key.
-    // Ensure "Allow new users to sign up" is DISABLED in Supabase Auth settings
-    // so that only this admin flow can create accounts.
+    if (demoMode && demoSessionId) {
+      const { data, error: fnError } = await supabase.functions.invoke('create-demo-user', {
+        body: {
+          email: newEmail,
+          password: newPassword,
+          display_name: newName,
+          role: newRole,
+          allowed_tabs: newRole === 'admin' ? ALL_TABS : newTabs,
+          demo_session_id: demoSessionId,
+        }
+      })
+      if (fnError || data?.error) {
+        setError(fnError?.message || data?.error || 'Αποτυχία δημιουργίας χρήστη.')
+        setCreating(false)
+        return
+      }
+      setSuccess(`Ο χρήστης "${newName}" δημιουργήθηκε (Demo — λήγει σε 24ω)`)
+      setNewEmail(''); setNewPassword(''); setNewName('')
+      setNewRole('employee'); setNewTabs(['Πελάτες'])
+      setCreating(false)
+      fetchStaff()
+      return
+    }
+
+    // Normal mode: existing flow
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: newEmail,
       password: newPassword,
-      options: {
-        data: { display_name: newName }
-      }
+      options: { data: { display_name: newName } }
     })
 
     if (authError) {
@@ -103,16 +123,10 @@ export default function AppSettingsTab({ user, staffInfo, refreshKey }) {
       return
     }
 
-    // Add staff record
     const tabs = newRole === 'admin' ? ALL_TABS : newTabs
     const { error: staffError } = await supabase
       .from('staff')
-      .insert({
-        user_id: userId,
-        display_name: newName,
-        role: newRole,
-        allowed_tabs: tabs
-      })
+      .insert({ user_id: userId, display_name: newName, role: newRole, allowed_tabs: tabs })
 
     if (staffError) {
       setError('Αποτυχία δημιουργίας εγγραφής staff. Δοκιμάστε ξανά.')
@@ -122,11 +136,8 @@ export default function AppSettingsTab({ user, staffInfo, refreshKey }) {
 
     logAction('create_staff', { entity: 'staff', entityId: userId, details: { name: newName, role: newRole } })
     setSuccess(`Ο χρήστης "${newName}" δημιουργήθηκε`)
-    setNewEmail('')
-    setNewPassword('')
-    setNewName('')
-    setNewRole('employee')
-    setNewTabs(['Πελάτες'])
+    setNewEmail(''); setNewPassword(''); setNewName('')
+    setNewRole('employee'); setNewTabs(['Πελάτες'])
     setCreating(false)
     fetchStaff()
   }
@@ -247,7 +258,10 @@ export default function AppSettingsTab({ user, staffInfo, refreshKey }) {
               <div key={s.user_id} className="as-staff-item">
                 <div className="as-staff-top">
                   <div className="as-staff-info">
-                    <span className="as-staff-name">{s.display_name}</span>
+                    <span className="as-staff-name">
+                      {s.display_name}
+                      {s.demo_session_id && <span className="demo-record-badge">Demo</span>}
+                    </span>
                     <select
                       className={`as-role-select ${s.role === 'admin' ? 'role-admin' : 'role-employee'}`}
                       value={s.role}

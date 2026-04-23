@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import './SettingsTab.css'
 
-export default function SettingsTab({ refreshKey }) {
+export default function SettingsTab({ refreshKey, demoMode = false }) {
   const [variables, setVariables] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -70,9 +70,15 @@ export default function SettingsTab({ refreshKey }) {
 
   return (
     <div className="settings-tab">
+      {demoMode && (
+        <div className="demo-readonly-notice">
+          <i className="fa-solid fa-flask-vial"></i>
+          Demo Mode — οι αλλαγές εδώ επηρεάζουν την δημόσια σελίδα και δεν επιτρέπονται
+        </div>
+      )}
       <div className="settings-header">
         <h2>Global Variables</h2>
-        <button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add Global Variable</button>
+        {!demoMode && <button className="btn-primary" onClick={() => setShowAdd(true)}>+ Add Global Variable</button>}
       </div>
       <p className="settings-subtitle">
         Μεταβλητές διαθέσιμες στους τύπους υπολογισμού τιμών (formula builder).
@@ -85,7 +91,7 @@ export default function SettingsTab({ refreshKey }) {
           <div className="var-card" key={v.key}>
             <div className="var-card-header">
               <span className="var-name">{v.key}</span>
-              <button className="btn-var-delete" onClick={() => handleDelete(v.key)}>Διαγραφή</button>
+              {!demoMode && <button className="btn-var-delete" onClick={() => handleDelete(v.key)}>Διαγραφή</button>}
             </div>
             <div className="var-card-body">
               <input
@@ -94,9 +100,11 @@ export default function SettingsTab({ refreshKey }) {
                 value={v.value}
                 onChange={e => updateLocal(v.key, e.target.value)}
               />
-              <button className="btn-save-sm" onClick={() => handleSave(v.key, v.value)}>
-                {saved === v.key ? '✓' : 'Αποθήκευση'}
-              </button>
+              {!demoMode && (
+                <button className="btn-save-sm" onClick={() => handleSave(v.key, v.value)}>
+                  {saved === v.key ? '✓' : 'Αποθήκευση'}
+                </button>
+              )}
             </div>
           </div>
         ))}

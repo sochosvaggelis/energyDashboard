@@ -40,7 +40,7 @@ function dataUriToSvg(dataUri) {
   }
 }
 
-export default function ProvidersTab({ serviceType, refreshKey }) {
+export default function ProvidersTab({ serviceType, refreshKey, demoMode = false, demoSessionId = null, demoExpiresAt = null }) {
   const cacheKey = `${CACHE_KEY}_${serviceType}`
 
   const [providers, setProviders] = useState(() => cacheGet(cacheKey) ?? [])
@@ -62,29 +62,40 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
 
   async function fetchProviders(skipCache = false) {
     setLoading(true)
-    if (!skipCache) {
+    if (!skipCache && !demoMode) {
       const cached = cacheGet(cacheKey)
       if (cached) { setProviders(cached); setLoading(false); return }
     }
 
-    const { data, error } = await supabase
-      .from('providers')
-      .select('*')
-      .order('created_at', { ascending: true })
+    let query = supabase.from('providers').select('*').order('created_at', { ascending: true })
+    if (demoMode && demoSessionId) {
+      query = query.or(`demo_session_id.is.null,demo_session_id.eq.${demoSessionId}`)
+    } else {
+      query = query.is('demo_session_id', null)
+    }
+    const { data, error } = await query
     if (error) setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.')
-    else { setProviders(data); cacheSet(cacheKey, data) }
+    else {
+      setProviders(data)
+      if (!demoMode) cacheSet(cacheKey, data)
+    }
     setLoading(false)
   }
 
   async function handleAdd(e) {
     e.preventDefault()
     setError(null)
-    const { error } = await supabase.from('providers').insert({
+    const insertData = {
       name: form.name,
       adjustment_factor: form.adjustment_factor ? safeNumber(form.adjustment_factor, null) : null,
       logo_url: svgToDataUri(form.logo_svg),
       has_gas: form.has_gas || false,
-    })
+    }
+    if (demoMode && demoSessionId) {
+      insertData.demo_session_id = demoSessionId
+      insertData.expires_at = demoExpiresAt
+    }
+    const { error } = await supabase.from('providers').insert(insertData)
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
     setForm({ name: '', adjustment_factor: '', logo_svg: '', has_gas: false })
     setShowModal(false)
@@ -93,6 +104,7 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
   }
 
   async function toggleGas(provider) {
+    if (demoMode && !provider.demo_session_id) return
     setError(null)
     const newVal = !provider.has_gas
     const { error } = await supabase.from('providers').update({ has_gas: newVal }).eq('id', provider.id)
@@ -115,6 +127,10 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
   async function saveEdit() {
     setError(null)
     if (!editProvider) return
+    if (demoMode && editProvider.demo_session_id !== demoSessionId) {
+      setError('Δεν μπορείς να τροποποιήσεις real providers σε demo mode.')
+      return
+    }
     const { error } = await supabase.from('providers').update({
       name: editData.name,
       adjustment_factor: editData.adjustment_factor !== '' ? safeNumber(editData.adjustment_factor, null) : null,
@@ -128,6 +144,11 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
   }
 
   async function handleDelete(id) {
+    const provider = providers.find(p => p.id === id)
+    if (demoMode && provider?.demo_session_id !== demoSessionId) {
+      setError('Δεν μπορείς να διαγράψεις real providers σε demo mode.')
+      return
+    }
     if (!confirm('Διαγραφή αυτού του provider;')) return
     setError(null)
     const { error } = await supabase.from('providers').delete().eq('id', id)
@@ -179,16 +200,38 @@ export default function ProvidersTab({ serviceType, refreshKey }) {
                       : <span className="no-logo">—</span>
                     }
                   </td>
-                  <td>{p.name}</td>
+                  <td>
+                    {p.name}
+                    {p.demo_session_id && <span className="demo-record-badge">Demo</span>}
+                  </td>
                   <td>{p.adjustment_factor ?? '—'}</td>
 
                   <td className="center-cell">
-                    <input type="checkbox" checked={!!p.has_gas} onChange={() => toggleGas(p)} />
+                    <input
+                      type="checkbox"
+                      checked={!!p.has_gas}
+                      onChange={() => toggleGas(p)}
+                      disabled={demoMode && !p.demo_session_id}
+                    />
                   </td>
                   <td>{new Date(p.created_at).toLocaleDateString('el-GR')}</td>
                   <td className="actions">
-                    <button className="btn-edit" onClick={() => openEdit(p)}>Edit</button>
-                    <button className="btn-delete" onClick={() => handleDelete(p.id)}>Delete</button>
+                    <button
+                      className="btn-edit"
+                      onClick={() => openEdit(p)}
+                      disabled={demoMode && !p.demo_session_id}
+                      title={demoMode && !p.demo_session_id ? 'Read-only σε Demo Mode' : undefined}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn-delete"
+                      onClick={() => handleDelete(p.id)}
+                      disabled={demoMode && !p.demo_session_id}
+                      title={demoMode && !p.demo_session_id ? 'Read-only σε Demo Mode' : undefined}
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}

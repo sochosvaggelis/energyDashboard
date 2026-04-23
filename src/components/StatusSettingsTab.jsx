@@ -6,7 +6,7 @@ const DEFAULT_STATUSES = ['Νέο', 'Σε επεξεργασία', 'Ολοκλη
 const SETTINGS_KEY = 'status_options'
 const LOCKED_STATUSES_KEY = 'locked_statuses'
 
-export default function StatusSettingsTab({ refreshKey }) {
+export default function StatusSettingsTab({ refreshKey, demoMode = false }) {
   const [statuses, setStatuses] = useState([])
   const [lockedStatuses, setLockedStatuses] = useState([]) // status names that trigger lock
   const [loading, setLoading] = useState(true)
@@ -139,6 +139,12 @@ export default function StatusSettingsTab({ refreshKey }) {
 
   return (
     <div className="sts-tab">
+      {demoMode && (
+        <div className="demo-readonly-notice">
+          <i className="fa-solid fa-flask-vial"></i>
+          Demo Mode — οι αλλαγές εδώ επηρεάζουν την δημόσια σελίδα και δεν επιτρέπονται
+        </div>
+      )}
       <div className="sts-header">
         <div>
           <h2>Status Πελατών</h2>
@@ -187,12 +193,12 @@ export default function StatusSettingsTab({ refreshKey }) {
               )}
             </div>
             <div className="sts-card-actions">
-              {editingIdx === idx ? (
+              {!demoMode && editingIdx === idx ? (
                 <>
                   <button className="btn-save-sm" onClick={handleEditSave}>Αποθήκευση</button>
                   <button className="sts-btn-cancel" onClick={() => setEditingIdx(null)}>Ακύρωση</button>
                 </>
-              ) : (
+              ) : !demoMode ? (
                 <>
                   <button
                     className={`sts-btn-lock ${isLocking ? 'active' : ''}`}
@@ -213,24 +219,26 @@ export default function StatusSettingsTab({ refreshKey }) {
                     <i className="fa-solid fa-trash"></i>
                   </button>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
           )
         })}
       </div>
 
-      <form className="sts-add-form" onSubmit={handleAdd}>
-        <input
-          className="sts-add-input"
-          placeholder="Νέο status..."
-          value={newStatus}
-          onChange={e => setNewStatus(e.target.value)}
-        />
-        <button className="btn-primary" type="submit" disabled={!newStatus.trim()}>
-          <i className="fa-solid fa-plus"></i> Προσθήκη
-        </button>
-      </form>
+      {!demoMode && (
+        <form className="sts-add-form" onSubmit={handleAdd}>
+          <input
+            className="sts-add-input"
+            placeholder="Νέο status..."
+            value={newStatus}
+            onChange={e => setNewStatus(e.target.value)}
+          />
+          <button className="btn-primary" type="submit" disabled={!newStatus.trim()}>
+            <i className="fa-solid fa-plus"></i> Προσθήκη
+          </button>
+        </form>
+      )}
     </div>
   )
 }

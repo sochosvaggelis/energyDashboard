@@ -55,7 +55,7 @@ function computeDiff(original, updated, providers) {
   return changes
 }
 
-export default function PlansTab({ serviceType, refreshKey }) {
+export default function PlansTab({ serviceType, refreshKey, demoMode = false, demoSessionId = null, demoExpiresAt = null }) {
   const plansCacheKey = `${CACHE_KEY_PLANS}_${serviceType}`
   const providersCacheKey = `${CACHE_KEY_PROVIDERS}_${serviceType}`
 
@@ -84,6 +84,15 @@ export default function PlansTab({ serviceType, refreshKey }) {
   }, [serviceType, refreshKey])
 
   async function fetchProviders(skipCache = false) {
+    if (demoMode && demoSessionId) {
+      const { data } = await supabase
+        .from('providers')
+        .select('id, name')
+        .or(`demo_session_id.is.null,demo_session_id.eq.${demoSessionId}`)
+        .order('name')
+      if (data) setProviders(data)
+      return
+    }
     if (!skipCache) {
       const cached = cacheGet(providersCacheKey)
       if (cached) {
@@ -107,17 +116,26 @@ export default function PlansTab({ serviceType, refreshKey }) {
 
   async function fetchPlans(skipCache = false) {
     setLoading(true)
-    if (!skipCache) {
+    if (!skipCache && !demoMode) {
       const cached = cacheGet(plansCacheKey)
       if (cached) { setPlans(cached); setLoading(false); return }
     }
-    const { data, error } = await supabase
+    let query = supabase
       .from('plans')
       .select('*, providers(name)')
       .eq('service_type', serviceType)
       .order('created_at', { ascending: true })
+    if (demoMode && demoSessionId) {
+      query = query.or(`demo_session_id.is.null,demo_session_id.eq.${demoSessionId}`)
+    } else {
+      query = query.is('demo_session_id', null)
+    }
+    const { data, error } = await query
     if (error) setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.')
-    else { setPlans(data); cacheSet(plansCacheKey, data) }
+    else {
+      setPlans(data)
+      if (!demoMode) cacheSet(plansCacheKey, data)
+    }
     setLoading(false)
   }
 
@@ -162,6 +180,10 @@ export default function PlansTab({ serviceType, refreshKey }) {
       duration: form.duration || null,
       info_text: form.info_text || null
     }
+    if (demoMode && demoSessionId) {
+      insertData.demo_session_id = demoSessionId
+      insertData.expires_at = demoExpiresAt
+    }
     const { data: newPlan, error } = await supabase.from('plans').insert(insertData).select().single()
     if (error) { setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.'); return }
     const providerName = providers.find(p => p.id === form.provider_id)?.name ?? form.provider_id
@@ -193,6 +215,10 @@ export default function PlansTab({ serviceType, refreshKey }) {
   async function saveEdit() {
     setError(null)
     if (!editPlan) return
+    if (demoMode && editPlan.demo_session_id !== demoSessionId) {
+      setError('Δεν μπορείς να τροποποιήσεις real plans σε demo mode.')
+      return
+    }
     const duplicate = plans.find(
       p => p.id !== editPlan.id &&
            p.plan_name.toLowerCase() === editData.plan_name.trim().toLowerCase() &&
@@ -223,6 +249,11 @@ export default function PlansTab({ serviceType, refreshKey }) {
   }
 
   async function handleDelete(id) {
+    const plan = plans.find(p => p.id === id)
+    if (demoMode && plan?.demo_session_id !== demoSessionId) {
+      setError('Δεν μπορείς να διαγράψεις real plans σε demo mode.')
+      return
+    }
     if (!confirm('Διαγραφή αυτού του plan;')) return
     setError(null)
     const { error } = await supabase.from('plans').delete().eq('id', id)
@@ -270,13 +301,30 @@ export default function PlansTab({ serviceType, refreshKey }) {
               {filtered.map(p => (
                 <tr key={p.id} className={editPlan?.id === p.id ? 'row-editing' : ''}>
                   <td>{p.providers?.name ?? '—'}</td>
-                  <td>{p.plan_name}</td>
+                  <td>
+                    {p.plan_name}
+                    {p.demo_session_id && <span className="demo-record-badge">Demo</span>}
+                  </td>
                   <td><span className="tariff-badge">{p.tariff_type}</span></td>
                   <td>{p.duration || '—'}</td>
                   <td className="info-text-cell">{p.info_text || '—'}</td>
                   <td className="actions">
-                    <button className="btn-edit" onClick={() => openEdit(p)}>Edit</button>
-                    <button className="btn-delete" onClick={() => handleDelete(p.id)}>Delete</button>
+                    <button
+                      className="btn-edit"
+                      onClick={() => openEdit(p)}
+                      disabled={demoMode && !p.demo_session_id}
+                      title={demoMode && !p.demo_session_id ? 'Read-only σε Demo Mode' : undefined}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn-delete"
+                      onClick={() => handleDelete(p.id)}
+                      disabled={demoMode && !p.demo_session_id}
+                      title={demoMode && !p.demo_session_id ? 'Read-only σε Demo Mode' : undefined}
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}

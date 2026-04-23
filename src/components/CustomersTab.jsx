@@ -97,7 +97,18 @@ function FileThumb({ pathOrUrl, label, index, onLightbox, resolveFileUrl }) {
   )
 }
 
-export default function CustomersTab({ user, refreshKey }) {
+export default function CustomersTab({ user, refreshKey, demoMode = false }) {
+  if (demoMode) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem', color: 'var(--text-muted)' }}>
+        <i className="fa-solid fa-users" style={{ fontSize: '3rem', opacity: 0.3 }}></i>
+        <h2 style={{ color: 'var(--text-primary)', fontSize: '1.1rem' }}>Πελάτες</h2>
+        <p style={{ fontSize: '0.88rem', textAlign: 'center', maxWidth: '320px' }}>
+          Τα δεδομένα πελατών δεν εμφανίζονται σε Demo Mode για λόγους προστασίας προσωπικών δεδομένων.
+        </p>
+      </div>
+    )
+  }
   const [submissions, setSubmissions] = useState(() => cacheGet(CACHE_KEY) ?? [])
   const [statusOptions, setStatusOptions] = useState(null)
   const [lockedStatuses, setLockedStatuses] = useState([])

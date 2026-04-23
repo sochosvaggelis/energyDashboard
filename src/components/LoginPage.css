@@ -1,3 +1,19 @@
+.login-back-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  text-align: center;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+
+.login-back-btn:hover {
+  color: var(--text-primary);
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;

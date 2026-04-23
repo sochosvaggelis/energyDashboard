@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import './LoginPage.css'
 
-export default function LoginPage() {
+export default function LoginPage({ onCancel }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -57,6 +57,11 @@ export default function LoginPage() {
         <button className="login-btn" type="submit" disabled={loading}>
           {loading ? <i className="fa-solid fa-spinner fa-spin"></i> : 'Σύνδεση'}
         </button>
+        {onCancel && (
+          <button type="button" className="login-back-btn" onClick={onCancel}>
+            ← Πίσω στο Demo
+          </button>
+        )}
       </form>
     </div>
   )

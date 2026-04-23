@@ -244,7 +244,7 @@ const CATEGORY_CLASSES = {
   'Δυναμικό Τιμολόγιο': 'cat-dynamic'
 }
 
-function CategoryTable({ title, plans, providers, variables, onStartEdit, onDelete, editingId }) {
+function CategoryTable({ title, plans, providers, variables, onStartEdit, onDelete, editingId, demoMode, demoSessionId }) {
   const [collapsed, setCollapsed] = useState(false)
   const catClass = CATEGORY_CLASSES[title] || ''
   const isVariable = title === 'Κυμαινόμενο Τιμολόγιο'
@@ -308,8 +308,22 @@ function CategoryTable({ title, plans, providers, variables, onStartEdit, onDele
                   <td>{p.duration || '—'}</td>
                   <td>{p.social_tariff ? 'Yes' : 'No'}</td>
                   <td className="actions">
-                    <button className="btn-edit" onClick={() => onStartEdit(p)}>Edit</button>
-                    <button className="btn-delete" onClick={() => onDelete(p.id)}>Delete</button>
+                    <button
+                      className="btn-edit"
+                      onClick={() => onStartEdit(p)}
+                      disabled={demoMode && !p.demo_session_id}
+                      title={demoMode && !p.demo_session_id ? 'Read-only σε Demo Mode' : undefined}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="btn-delete"
+                      onClick={() => onDelete(p.id)}
+                      disabled={demoMode && !p.demo_session_id}
+                      title={demoMode && !p.demo_session_id ? 'Read-only σε Demo Mode' : undefined}
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -324,7 +338,7 @@ function CategoryTable({ title, plans, providers, variables, onStartEdit, onDele
   )
 }
 
-export default function PlansByCategoryTab({ serviceType, refreshKey }) {
+export default function PlansByCategoryTab({ serviceType, refreshKey, demoMode = false, demoSessionId = null, demoExpiresAt = null }) {
   const [plans, setPlans] = useState(() => cacheGet(`${CACHE_KEY_PLANS}_${serviceType}`) ?? [])
   const [providers, setProviders] = useState(() => cacheGet(`${CACHE_KEY_PROVIDERS}_${serviceType}`) ?? [])
   const [variables, setVariables] = useState({})
@@ -377,17 +391,26 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
   async function fetchPlans(skipCache = false) {
     setLoading(true)
     const cacheKey = `${CACHE_KEY_PLANS}_${serviceType}`
-    if (!skipCache) {
+    if (!skipCache && !demoMode) {
       const cached = cacheGet(cacheKey)
       if (cached) { setPlans(cached); setLoading(false); return }
     }
-    const { data, error } = await supabase
+    let query = supabase
       .from('plans')
       .select('*, providers(name)')
       .eq('service_type', serviceType)
       .order('created_at', { ascending: true })
+    if (demoMode && demoSessionId) {
+      query = query.or(`demo_session_id.is.null,demo_session_id.eq.${demoSessionId}`)
+    } else {
+      query = query.is('demo_session_id', null)
+    }
+    const { data, error } = await query
     if (error) setError('Προέκυψε σφάλμα. Δοκιμάστε ξανά.')
-    else { setPlans(data); cacheSet(cacheKey, data) }
+    else {
+      setPlans(data)
+      if (!demoMode) cacheSet(cacheKey, data)
+    }
     setLoading(false)
   }
 
@@ -441,6 +464,10 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
   async function saveEdit() {
     setError(null)
     if (!editPlan) return
+    if (demoMode && editPlan.demo_session_id !== demoSessionId) {
+      setError('Δεν μπορείς να τροποποιήσεις real plans σε demo mode.')
+      return
+    }
     const teaActive = editData.price_mode === 'auto' || editData.night_price_mode === 'auto'
     if (teaActive) {
       const missing = []
@@ -491,6 +518,11 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
   }
 
   async function handleDelete(id) {
+    const plan = plans.find(p => p.id === id)
+    if (demoMode && plan?.demo_session_id !== demoSessionId) {
+      setError('Δεν μπορείς να διαγράψεις real plans σε demo mode.')
+      return
+    }
     if (!confirm('Διαγραφή αυτού του plan;')) return
     setError(null)
     const { error } = await supabase.from('plans').delete().eq('id', id)
@@ -546,6 +578,8 @@ export default function PlansByCategoryTab({ serviceType, refreshKey }) {
                   onStartEdit={openEdit}
                   onDelete={handleDelete}
                   editingId={editPlan?.id}
+                  demoMode={demoMode}
+                  demoSessionId={demoSessionId}
                 />
               ))}
             </div>
